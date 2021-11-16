@@ -1,0 +1,439 @@
+---
+title: Resistentie bruine rat
+subtitle: Data-analyse 2013-2019
+author: 
+  - firstname: Raïsa
+    name: Carmen
+    email: raisa.carmen@inbo.be
+    orcid: 0000-0003-1025-8702
+  - firstname: Thierry
+    name: Onkelinx
+    email: thierry.onkelinx@inbo.be
+    orcid: 0000-0001-8804-4216
+shortauthor: Carmen, R., Onkelinx, T.
+corresponding: raisa.carmen@inbo.be
+reviewer:
+  - firstname: Jane
+    name: Doe
+year: 2021
+cover_photo: https://img1.vildaphoto.net/asset/l/17358.jpg
+cover_description: Bruine rat / Rattus norvegicus. Vilda Photo /	Yves Adams
+cover: cover.pdf
+doi: doi.org/11.11111/inbor.11111111
+reportnr: 11
+depotnr: D/1111/1111/111
+embargo: 2021-10-04
+style: INBO
+lang: nl
+lot: TRUE
+lof: TRUE
+site: bookdown::bookdown_site
+link-citations: TRUE
+bibliography: "references.bib"
+output:
+  INBOmd::report: default
+  INBOmd::gitbook: default
+  bookdown::dont_run: default
+  INBOmd::ebook: default
+---
+
+
+# Inleiding
+
+In 2002 werd het onderzoek rond resistentie tegen rodenticiden op basis van anticoagulantia
+of antistollingsmiddelen in Vlaanderen opgestart. Eerder gepubliceerde resultaten kunnen gevonden worden in, onder andere, @Baert2012, @Baert2012b en @Baert2016.
+
+In dit rapport bekijken we data van 2013 t.e.m. 2019 over heel Vlaanderen mbt resistentie van bruine rat tegen rattenvergif. Er zijn drie gekende mutaties die resistentie veroorzaken. Een dier kan 0, 1, of 2 gemuteerde allelen hebben. 
+
+
+
+```{r setup, include = FALSE}
+library(knitr)
+opts_chunk$set(
+  echo = FALSE,
+  eval = TRUE,
+  cache = FALSE,
+  fig.width = 150 / 25.4,
+  fig.height = 100 / 25.4,
+  warning = TRUE,
+  error = FALSE,
+  message = TRUE
+)
+library(lubridate)
+library(tidyverse)
+library(INBOtheme)
+if (interactive()) {
+  theme_set(
+    theme_inbo(
+      base_family = "FlandersArtSans-Regular",
+      base_size = 10
+    )
+  )
+} else {
+  switch(
+    opts_knit$get("rmarkdown.pandoc.to"),
+    html = {
+      opts_chunk$set(dev = "png", dpi = 72)
+      theme_set(
+        theme_inbo(
+          base_family = "FlandersArtSans-Regular", 
+          base_size = 12
+        )
+      )
+    },
+    latex = {
+      opts_chunk$set(dev = "cairo_pdf", dpi = 300)
+      theme_set(
+        theme_inbo(
+          base_family = "FlandersArtSans-Regular", 
+          base_size = 9
+        )
+      )
+      update_geom_defaults("point", list(size = 1.5))
+    },
+    epub3 = {
+      opts_chunk$set(dev = "png", dpi = 300)
+      theme_set(
+        theme_inbo(
+          base_family = "FlandersArtSans-Regular", 
+          base_size = 12
+        )
+      )
+    }
+  )
+}
+
+library(INLA)
+library(inlabru)
+library(sf)
+library(rgdal)
+library(rprojroot)
+#library(inlatools)
+library(tidyverse)
+library(readxl)
+BESF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                        criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Beneden_Schelde_fishnet_clip")%>%
+  mutate(BekkenNaam = "Beneden Schelde")
+BOSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                        criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Boven_Schelde_fishnet_clip")%>%
+  mutate(BekkenNaam = "Boven Schelde")
+BPSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                        criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Brugse_polders_fishnet_clip")%>%
+  mutate(BekkenNaam = "Brugse polders")
+DDSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                        criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Dender_fishnet_clip")%>%
+  mutate(BekkenNaam = "Dender")
+DLSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                        criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Dijle_fishnet_clip")%>%
+  mutate(BekkenNaam = "Dijle")
+DMSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                        criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Demer_fishnet_clip")%>%
+  mutate(BekkenNaam = "Demer")
+GKSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                        criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Gentse_kanalen_fishnet_clip")%>%
+  mutate(BekkenNaam = "Gense kanalen")
+IZSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                        criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Ijzer_fishnet_clip")%>%
+  mutate(BekkenNaam = "Ijzer")
+LESF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                        criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Leie_fishnet_clip") %>%
+  mutate(BekkenNaam = "Leie")
+MASF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                        criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Maas2_fishnet_clip") %>%
+  mutate(BekkenNaam = "Maas Antwerpen")
+MLSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                        criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Maas1_fishnet_clip") %>%
+  mutate(BekkenNaam = "Maas Limburg")
+NESF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                        criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Nete_fishnet_clip") %>%
+  mutate(BekkenNaam = "Nete")
+Hokken <- rbind(BESF, BOSF, BPSF, DDSF, DLSF, DMSF, GKSF, IZSF, LESF, MASF, 
+                   MLSF, NESF)#does not work for more than 2
+```
+
+# Data exploratie
+
+```{r InlezenData, echo = FALSE}
+data <- read_excel(path = find_root_file("data", 
+                                         "2013 - 2019 BMK.xlsx",
+                                         criterion = 
+                                           has_file("ResistentieBrRat.Rproj"))
+                   ) %>%
+  mutate(Bekken = as.factor(Bekken),
+         mutatie = as.factor(mutatie),
+         BekkenNaam = recode(Bekken,"BE" = "Beneden Schelde",
+                                 "BO" = "Boven Schelde",
+                                 "BP" = "Brugse polders",
+                                 "DD" = "Dender",
+                                 "DL" = "Dijle",
+                                 "DM" = "Demer",
+                                 "GK" = "Gense kanalen",
+                                 "IZ" = "Ijzer",
+                                 "LE" = "Leie",
+                                 "MA" = "Maas Antwerpen",
+                                 "ML" = "Maas Limburg",
+                                 "NE" = "Nete"),
+         BekkenNaam = factor(BekkenNaam, levels = sort(levels(BekkenNaam))),
+         Resistent = !(mutatie =='WW'),
+         MutatieM1 = str_detect(mutatie,regex('M1')),
+         MutatieM2 = str_detect(mutatie,regex('M2')),
+         MutatieM3 = str_detect(mutatie,regex('M3')))
+data %>% st_as_sf(coords = c("X_lambert", "Y_lambert"), crs = "EPSG:31370") -> data
+data %>% 
+  st_drop_geometry() %>%
+  group_by(jaar) %>%
+  summarise(N = n()) %>% 
+  ungroup() -> datajaar
+```
+
+```{r Numbers}
+AantalSamples <- 10
+MeshMaxEdge <- 10e3
+```
+
+Een overzicht van alle datapunten kan gevonden worden op [https://rattenbestrijding.inbo.be/](https://rattenbestrijding.inbo.be/). Figuur \@ref(fig:SamenvattingData) toont een samenvatting van de hoeveelheid data die we hebben over de verschillende bekkens en over alle jaren. Het doel was om ieder jaar in ieder van de bekkens 100 ratten te vangen en te testen op genetische mutaties. De bekken werden daarom in 100 hokken verdeeld zodat de steekproef geografisch gebalanceerd gespreid was. In 2017 en 2018 werden alleen de minder resistente hokken bemonsterd, in 2019 werden terug alle bekkens bemonsterd. In totaal werden er zo ieder jaar minstens `r min(datajaar$N)` (in `r datajaar[datajaar$N==min(datajaar$N),'jaar']`) en maximum `r max(datajaar$N)` (in `r datajaar[datajaar$N==max(datajaar$N),'jaar']`) ratten gevangen en getest op resistentie. 
+
+```{r SamenvattingData, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap = "Aantal gevangen ratten per jaar, per bekken."}
+data %>% group_by(BekkenNaam, jaar) %>%
+  summarise(N = n()) %>% 
+  complete(BekkenNaam, jaar) %>%
+  ungroup() %>%
+  mutate(N = ifelse(is.na(N),0,N)) %>%
+  ggplot + geom_line(aes(color = BekkenNaam, x = jaar, y = N), size = 1) + 
+  scale_x_continuous(breaks = 2013:2019) +  scale_y_continuous(breaks = seq(0,120,20), limits = c(0,120)) + 
+  theme_bw() + scale_color_brewer(name = "", palette = "Paired") +
+  ylab('Aantal ratten')
+```
+## Spreiding observaties in tijd
+
+Enkele ratten werden toegewezen aan een ander jaar dan het jaar waarin ze gevangen werden. Dit gebeurde vooral met ratten die op het einde van het voorgaande jaar werden gevangen (Figuur \@ref(fig:DatumvsJaar)). Figuur \@ref(fig:Vangstjaar) vergelijkt het jaar waarin de ratten gevangen werden ten opzichte van het jaar waaraan ze werden toegewezen. Figuur \@ref(fig:VangstjaarBekken) geeft hetzelfde overzicht per bekken. Er waren `r sum(is.na(data$datum))` ratten waar de datum van vangst niet gekend was ("Onbekend" in Figuur \@ref(fig:Vangstjaar)).
+
+```{r Vangstjaar, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap = "Vergelijking van het jaar waarin de rat gevangen werd t.o.v. het jaar waaraan de staal werd toegewezen"}
+data %>% 
+  mutate(jaardatum = year(datum)) %>%
+  group_by(jaar, jaardatum) %>%
+  summarise(N = n()) %>% 
+  mutate(jaardatum = ifelse(is.na(jaardatum),"Onbekend",jaardatum)) %>%
+  ungroup() %>%
+  ggplot() +
+  geom_col(aes(fill = jaardatum, x = jaar, y = N)) +
+  scale_x_continuous(breaks = 2013:2019) +  
+  theme_bw() + scale_fill_brewer(name = "Jaar vangst", palette = "Paired") +
+  ylab('Aantal ratten') + xlab("Toegewezen jaar")
+```
+
+```{r VangstjaarBekken, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap = "Vergelijking van het jaar waarin de rat gevangen werd t.o.v. het jaar waaraan de staal werd toegewezen. Voor ieder van de bekken wordt het aantal observaties zonder geldige datum (Onbekend) en het aantal observaties waar het toegewezen jaar niet gelijk is aan het vangstjaar (shift jaar) vermeld."}
+lbls <- data %>% st_drop_geometry() %>%
+  mutate(jaardatum = as.factor(year(datum))) %>% 
+  mutate(jaardatum = ifelse(is.na(jaardatum),"Onbekend",jaardatum)) %>%
+  group_by(BekkenNaam) %>%
+  summarise(missingdatum = sum(jaardatum == "Onbekend"),
+            shiftjaar = sum(jaardatum != "Onbekend" & jaar != jaardatum)) %>% 
+  mutate(label = sprintf("%s, Onbekend = %d, shift jaar = %d", 
+            BekkenNaam, missingdatum, shiftjaar))
+lbl <- lbls$label
+names(lbl) <- lbls$BekkenNaam
+data %>% 
+  mutate(jaardatum = as.factor(year(datum)),
+         jaardatum = ifelse(is.na(jaardatum),"Onbekend",jaardatum)) %>%
+  group_by(jaar, jaardatum, BekkenNaam) %>%
+  summarise(N = n(),
+            missingdatum = sum(jaardatum == "Onbekend"),
+            shiftjaar = sum(jaardatum != "Onbekend" & jaar != jaardatum)) %>%
+  ungroup() %>%
+  ggplot() +
+  geom_col(aes(fill = jaardatum, x = jaar, y = N)) +
+  facet_wrap(facets = vars(BekkenNaam), ncol = 3, 
+             labeller = labeller(BekkenNaam = lbl)) +
+  scale_x_continuous(breaks = 2013:2019) +  
+  theme_bw() + scale_fill_brewer(name = "Jaar vangst", palette = "Paired") +
+  ylab('Aantal ratten') + xlab("Toegewezen jaar")
+```
+
+```{r DatumvsJaar, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap = "Overzicht van de vangstdatum van ratten die gevangen werden in een ander jaar dat het jaar waar ze aan werden toegewezen."}
+data %>%
+  mutate(jaardatum = as.factor(year(datum)),
+         datum = as.Date(datum)) %>%
+  filter(!is.na(jaardatum) &  jaardatum != jaar) %>%
+  ggplot() + 
+  geom_jitter(aes(x = datum, y = jaar, color = factor(jaar))) +
+  scale_x_date(breaks = "1 year", minor_breaks = "1 month") +
+  theme_bw() + scale_color_discrete(name = "Jaar toewijzing") +
+  ylab('Toegewezen jaar') + xlab("Datum vangst") + 
+  scale_y_continuous(breaks = seq(2013,2019))
+```
+
+## Spreiding in ruimte
+Dankzij de keuze om ieder van de bekkens op te delen in 100 hokken, zijn de observaties geografisch behoorlijk gebalanceerd gespreid (Figuur \@ref(fig:SpreadingRuimte)). Aan hokken zonder observaties werden soms dieren uit naburige hokken toegewezen, anders bleven de hokken leeg.
+
+
+```{r SpreadingRuimte, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap = "Geografische spreiding van de observaties, per jaar."}
+KaartSF <- read_sf(dsn = find_root_file("data", "Kaartjes", criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                   layer = "Vlaanderen")
+ggplot() + 
+  geom_sf(data = Hokken, aes(fill = BekkenNaam), alpha = 0.2) + 
+  geom_sf(data = data, aes(color = BekkenNaam)) + 
+  scale_color_brewer(name = "Bekken", palette = "Paired") +
+  scale_fill_brewer(name = "Bekken", palette = "Paired") +
+  facet_wrap(vars(jaar), ncol = 2) +
+  guides(fill = "none") 
+```
+
+## Resistentie
+
+Figuur \@ref(fig:Samenvattingresistentie) toont, voor ieder van de bekken en voor ieder jaar de proportie ratten die resistent waren door minstens één van de drie gekende genetische mutaties. Figuur \@ref(fig:Samenvattingresistentie2) toont, voor ieder van de bekken en voor ieder jaar de proportie ratten die resistent waren door ieder van de drie gekende genetische mutaties. Het is duidelijk dat mutatie 3 het minst voorkomt en mutatie 1 het meeste. In het Demerbekken en in mindere mate ook Dijle en Maas Limburg komt mutatie 2 vaker voor.
+
+```{r Samenvattingresistentie, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap="Resistentie per bekken, per jaar."}
+data %>% group_by(BekkenNaam, jaar) %>%
+  summarise(Resistent = mean(Resistent),
+            M1 = mean(MutatieM1),
+            M2 = mean(MutatieM2),
+            M3 = mean(MutatieM3)) -> 
+  dataResistentie
+  ggplot(dataResistentie) + geom_point(aes(color = as.factor(jaar), 
+                                           x = BekkenNaam, 
+                                           y = Resistent)) + 
+  scale_y_continuous(breaks = seq(0,1,0.20), limits = c(0,1)) + 
+  scale_color_discrete(name = '') +
+  coord_flip() +
+  theme_bw() + xlab('Bekken') +
+  ylab('Proportie resistente ratten')
+```
+```{r Samenvattingresistentie2, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=12, fig.cap="Proportie met genetische mutatie per bekken, per jaar."}
+mutatielabel <- c('Mutatie 1','Mutatie 2','Mutatie 3')
+names(mutatielabel) <- c('M1','M2','M3')
+dataResistentie %>%
+  pivot_longer(cols = c('M1', 'M2', 'M3'), 
+               names_to = "mutatie",
+               values_to = "proportie") %>%
+  ggplot() + geom_point(aes(color = as.factor(jaar), 
+                                           x = BekkenNaam, 
+                                           y = proportie)) + 
+  facet_grid(cols = vars(mutatie), labeller = labeller(mutatie = mutatielabel)) +
+  scale_y_continuous(breaks = seq(0,1,0.20), limits = c(0,1)) + 
+  scale_color_discrete(name = '') +
+  coord_flip() +
+  theme_bw() + xlab('Bekken') +
+  ylab('Proportie mutatie')
+```
+
+Figuur \@ref(fig:SamenvattingresistentieSF) toont dieren met minstens één van de drie mutaties in het rood op de kaart. 
+
+```{r SamenvattingresistentieSF, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap="Resistentie per bekken, per jaar."}
+ggplot() + geom_sf(data = Hokken, aes(fill = BekkenNaam), alpha = 0.2) +
+  geom_sf(data = data, aes(color = Resistent), size = 0.8) + 
+  scale_color_manual(name = 'Resistent', 
+                       breaks = c(TRUE, FALSE),
+                       labels = c('Ja','Nee'),
+                       values = c('red','grey')) +
+  scale_fill_brewer(name = "Bekken", palette = "Paired") +
+  facet_wrap(vars(jaar), ncol = 2) +
+  theme_bw() 
+```
+
+# Dataverwerking
+## Een Bayesiaans, spatiaal & temporaal model voor de rattenresistentie in Vlaanderen
+
+### Mesh Vlaanderen op basis van kaart
+Met een max edge (grootst toegestane edge lengte) van `r print(MeshMaxEdge)` tot `r sprintf("%d",3*MeshMaxEdge)` en een cutoff (minimum toegestane afstand tussen punten) van `r MeshMaxEdge/5` bekomen we de mesh in Figuur \@ref(fig:INLAmeshShape). Deze mesh zal gebruikt worden voor de schatting van een spatiaal model van de resistentie.
+
+```{r INLAmeshShape, echo = FALSE, warning = FALSE}
+Kaart <- readOGR(dsn = find_root_file("data", "Kaartjes", criterion = 
+                                           has_file("ResistentieBrRat.Rproj")),
+                 layer = "Vlaanderen", 
+                 verbose = FALSE)
+
+mesh <- inla.mesh.2d(boundary = Kaart, 
+                     max.edge = c(MeshMaxEdge, 3*MeshMaxEdge), 
+                     cutoff = MeshMaxEdge/5)
+ggplot() + gg(mesh) + coord_fixed() +  
+  ggtitle(paste("Vertices: ", mesh$n)) + theme_void()
+spdeC <- inla.spde2.pcmatern(mesh, prior.range = c(3*MeshMaxEdge, 0.5), 
+                             prior.sigma = c(0.6, 0.05),
+                             constr = TRUE)
+
+# SPDE definieren
+Projectionmatrix <- inla.spde.make.A(mesh,
+                                     group = (data$jaar - min(data$jaar) + 1),
+                                     loc = st_coordinates(data))
+#defining the sptial random fields
+w.index <- inla.spde.make.index( name = "w",
+                                 n.spde = mesh$n, 
+                                 n.group = length(
+                                   unique(
+                                     data$jaar - min(data$jaar) + 1)
+                                   )
+                                 )
+#covariates
+X <- data.frame(Intercept = rep(1,nrow(data)),
+                Bekken = data$Bekken)
+#define the stack
+Stk <- inla.stack(
+  tag = "Fit",
+  data = list(y = as.numeric(data$Resistent)),
+  A = list(Projectionmatrix,1),
+  effects = list(w.index,X)
+)
+#define the model
+f <- y ~ -1 + Intercept + Bekken +
+  f(w,
+    model=spde,
+    group = w.group,
+    control.group = list(model = "ar1"))
+spde <- inla.spde2.matern(mesh, alpha = 2)
+#fitting the model
+mod <- inla(f,
+            family = "binomial",
+            data = inla.stack.data(Stk),
+            control.compute = list(waic = TRUE, dic = TRUE),
+            control.predictor = list(A = inla.stack.A(Stk)))
+#temporal correlated random effects
+v <- as.matrix(Projectionmatrix) %*% mod$summary.random$w$mean
+#spatio-temporal random field
+pm <- mod$summary.random$w$mean
+wproj <- inla.mesh.projector (mesh, 
+                              xlim = range(st_coordinates(data)[,1]),
+                              ylim = range(st_coordinates(data)[,2]))
+w7 <- list()
+for (i in 1:7) {
+  w7[[i]] <- inla.mesh.project(wproj,
+                               pm[w.index$w.group == i])
+}
+
+```
+
+```{r plotphi, echo = FALSE, warning = FALSE, fig.cap= "Posterior dichtheid funtie voor for phi. Als phi=1, dan wordt het aantal resistente dieren in de populatie in jaar t volledig bepaald door het aantal resistente dieren in jaar t-1. Als phi=0, dan wordt het aantal resistente dieren in de populatie in jaar t helemaal niet bepaald door het aantal resistente dieren in jaar t-1."}
+
+phi <- mod$summary.hy[3,"mean"]#0.98
+plot(mod$marginals.hyper[[3]],
+     xlab = expression(phi),
+     ylab = "Density", type = 'l')
+abline(v = phi, col = 2)
+```
+
+
