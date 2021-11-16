@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+css/*
+Resistentie_Bruine_Rat/Resistentie-Bruine-Rat_files/*
+Resistentie_Bruine_Rat/css/*
+Resistentie_Bruine_Rat/libs/*
+*.html
+*.log
