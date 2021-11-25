@@ -356,12 +356,37 @@ ggplot() + geom_sf(data = Hokken, aes(fill = BekkenNaam), alpha = 0.2) +
   theme_bw() 
 ```
 
+Figuur \@ref(fig:resistentieTijd) de trend in de proportie resistentie (over alle mutaties) en voor ieder van de mutaties apart. Figuur \@ref(fig:resistentieTijd2) toont dezelfde informatie per bekken. Deze grafieken zijn uiteraard vertekend in 2017 en 2018 wanneer er enkel in de gebieden met lage resistentie onderzoek werd gedaan.
+
+```{r resistentieTijd, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap="Resistentie per bekken, per jaar."}
+data %>% group_by(jaar) %>% st_drop_geometry() %>%
+  summarize(Resistentie = mean(Resistent),
+         M1 = mean(MutatieM1),
+         M2 = mean(MutatieM2),
+         M3 = mean(MutatieM3)) %>%
+  pivot_longer(cols = -1, names_to = "Type", values_to = "Proportie") %>%
+  ggplot() + geom_line(aes(color = Type, x = jaar, y = Proportie)) +
+  theme_bw() +
+  scale_x_continuous(breaks = 2013:2019)
+```
+```{r resistentieTijd2, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap="Resistentie per bekken, per jaar."}
+data %>% group_by(jaar,  BekkenNaam) %>% st_drop_geometry() %>%
+  summarize(Resistentie = mean(Resistent),
+         M1 = mean(MutatieM1),
+         M2 = mean(MutatieM2),
+         M3 = mean(MutatieM3)) %>%
+  pivot_longer(cols = -c(1,2), names_to = "Type", values_to = "Proportie") %>%
+  ggplot() + geom_line(aes(color = Type, x = jaar, y = Proportie)) +
+  theme_bw() +
+  scale_x_continuous(breaks = 2013:2019) +
+  facet_wrap(vars(BekkenNaam), nrow = 4)
+```
+
 # Dataverwerking
-## Een Bayesiaans, spatiaal & temporaal model voor de rattenresistentie in Vlaanderen
 
-### Mesh Vlaanderen op basis van kaart
-Met een max edge (grootst toegestane edge lengte) van `r print(MeshMaxEdge)` tot `r sprintf("%d",3*MeshMaxEdge)` en een cutoff (minimum toegestane afstand tussen punten) van `r MeshMaxEdge/5` bekomen we de mesh in Figuur \@ref(fig:INLAmeshShape). Deze mesh zal gebruikt worden voor de schatting van een spatiaal model van de resistentie.
+We fitten vier verschillende Bayesiaanse, spatiale en temporale modellen, steeds met een andere afhankelijke variabele. Bij het eerste model bekijken de resistentie in het algemeen; onze afhankelijke variabele is 1 indien ze minstens één van de mutaties aanwezig is. De andere drie modellen bekijken ieder van de mutaties apart.
 
+Voor ieder van de modellen gebruiken we verder dezelfde dataset en dezelfde mesh met een max edge (grootst toegestane edge lengte) van `r print(MeshMaxEdge)` tot `r sprintf("%d",3*MeshMaxEdge)` en een cutoff (minimum toegestane afstand tussen punten) van `r MeshMaxEdge/5` (Figuur \@ref(fig:INLAmeshShape)).
 ```{r INLAmeshShape, echo = FALSE, warning = FALSE}
 Kaart <- readOGR(dsn = find_root_file("data", "Kaartjes", criterion = 
                                            has_file("ResistentieBrRat.Rproj")),
@@ -373,26 +398,85 @@ mesh <- inla.mesh.2d(boundary = Kaart,
                      cutoff = MeshMaxEdge/5)
 ggplot() + gg(mesh) + coord_fixed() +  
   ggtitle(paste("Vertices: ", mesh$n)) + theme_void()
-spdeC <- inla.spde2.pcmatern(mesh, prior.range = c(3*MeshMaxEdge, 0.5), 
-                             prior.sigma = c(0.6, 0.05),
-                             constr = TRUE)
+```
 
-# SPDE definieren
+
+## Rattenresistentie in Vlaanderen
+In dit hoofdstuk testen we een bayesiaans model met spatiale en temporale correlaties. De afhankelijke variabele, resistentie $Y_r$, is 1 indien er minstens één mutatie aanwezig is en anders 0. Voor de temporale component gebruiken we het feitelijke jaar waarin de rat werd gevangen en niet het jaar waaraan de rat werd toegewezen. Daarnaast gebruiken we ook de feitelijke x-y coördinaten in plaats van het hok waar de rat werd aan toegewezen. Deze x-y coordinaten kunnen afwijken van de echte vanglocatie; indien de chte vanglocatie niet gekend was, werd het centrum van het hok ingevuld.
+
+$$R_{st}=B(\pi_{st})$$
+$$E(R_{st})=\pi_{st}$$
+$$logit(\pi_{st}) = \beta_1+u_{st}+$$
+$$u_{st} \sim GMRF(0, \Omega)$$
+$R_{st}$ is de resistentie op locatie $s$ op tijdstip $t$. $u$ is het spatiaal
+gecorreleerde random effect, en wordt benaderd door een Gaussian Markov random 
+field (GMRF) met gemiddelde 0 en correlatie matrix $\Omega$.
+
+```{r Resistentiemodel, echo = FALSE, warning = FALSE, cache = TRUE}
+#########-----------INLA model; no spatial or time correlation----------########
+data$y <- as.numeric(data$Resistent)
+f1 <- y ~ 1  + Bekken
+mod <- inla(f1,
+             family = "binomial",
+             data = data,
+             control.compute = list(waic = TRUE, dic = TRUE))
+
+
+#########-------------------Spatial INLA model-----------------------###########
+# spdeC <- inla.spde2.pcmatern(mesh, prior.range = c(3*MeshMaxEdge, 0.5), 
+#                              prior.sigma = c(0.6, 0.05),
+#                              constr = TRUE) #pc--> PC priors = penalized 
+#                                                             complexity priors
+
+spde <- inla.spde2.matern(mesh, alpha = 2)
+ProjectionmatrixS <- inla.spde.make.A(mesh, loc = st_coordinates(data))
+
+# dim(Projectionmatrix)
+w.indexS <- inla.spde.make.index(
+                   name    = 'w',
+                   n.spde  = spde$n.spde,
+                   n.group = 1,
+                   n.repl  = 1)
+#covariates
+X <- data.frame(Intercept = rep(1,nrow(data)),
+                Bekken = data$Bekken)
+#making the stack
+Stk2 <- inla.stack(
+             tag  = "Fit",
+             data = list(y = as.numeric(data$Resistent)),
+	         A    = list(ProjectionmatrixS, 1),
+	         effects = list(
+	              w = w.indexS,            #Spatial field
+	              X = X))  #Covariates
+
+f2 <- y ~ -1 + Intercept + Bekken +
+               f(w, model = spde)
+
+
+modS <- inla(f2,
+             family = "binomial",
+             data = inla.stack.data(Stk2),
+             control.compute = list(dic = TRUE, waic = TRUE),
+             control.predictor = list(A = inla.stack.A(Stk2)))
+
+#############-----------Spatial and time correlations-------------##############
+## define SPDE 
 Projectionmatrix <- inla.spde.make.A(mesh,
                                      group = (data$jaar - min(data$jaar) + 1),
-                                     loc = st_coordinates(data))
-#defining the sptial random fields
+                                     loc = st_coordinates(data),
+                                     Ngroup = length(unique(
+                                       data$jaar - min(data$jaar) + 1))
+                                     )
+## defining the spatial random fields
 w.index <- inla.spde.make.index( name = "w",
-                                 n.spde = mesh$n, 
+                                 n.spde = mesh$n, #of spdeC$n.spde?
                                  n.group = length(
                                    unique(
                                      data$jaar - min(data$jaar) + 1)
                                    )
                                  )
-#covariates
-X <- data.frame(Intercept = rep(1,nrow(data)),
-                Bekken = data$Bekken)
-#define the stack
+
+#define the stack; this tells INLA at which mesh points the covariates are sampled
 Stk <- inla.stack(
   tag = "Fit",
   data = list(y = as.numeric(data$Resistent)),
@@ -402,18 +486,56 @@ Stk <- inla.stack(
 #define the model
 f <- y ~ -1 + Intercept + Bekken +
   f(w,
-    model=spde,
+    model = spde,
     group = w.group,
     control.group = list(model = "ar1"))
-spde <- inla.spde2.matern(mesh, alpha = 2)
 #fitting the model
-mod <- inla(f,
+modTS <- inla(f,
             family = "binomial",
             data = inla.stack.data(Stk),
             control.compute = list(waic = TRUE, dic = TRUE),
             control.predictor = list(A = inla.stack.A(Stk)))
+rho <- modTS$summary.hy[3,"mode"]
+rho
+
+par(mfrow=c(1,1), mar=c(5,5,2,2), cex.lab = 1.5)
+plot(modTS$marginals.hyper[[3]],
+     type = 'l',
+     xlab = expression(phi),
+     ylab = 'Density')
+abline(v = rho, col = 2)
+
+#########---------------------------Compare models-------------------###########
+c(mod$dic$dic, modS$dic$dic, modTS$dic$dic)
+c(mod$waic$waic, modS$waic$waic, modTS$waic$waic)
+
+#fixed effects
+Combined <- rbind(mod$summary.fixed[, c("mean", "0.025quant", "0.975quant")],
+                  modS$summary.fixed[, c("mean", "0.025quant", "0.975quant")],
+                  modTS$summary.fixed[, c("mean", "0.025quant", "0.975quant")]
+)
+Combined$WhichModel <- c(rep("GLM",12), 
+                         rep(c("Spatial", "Spatial-temporal"), each = 13))
+Combined$WhichVariable <- c(rownames(mod$summary.fixed), 
+                            rownames(modS$summary.fixed), 
+                            rownames(modTS$summary.fixed))
+colnames(Combined) <- c("Mean", "Lo", "Up", "WhichModel", "WhichVariable")
+p <- ggplot() + geom_point(data = Combined,
+                   aes(x = WhichModel,
+                       y = Mean)) +
+  geom_errorbar(data = Combined,
+                aes(x = WhichModel,
+                    ymax = Up,
+                    ymin = Lo),
+                width = 0.2) +
+  xlab("Parameters") + ylab("Posterior mean values and 95% CI") + 
+  geom_hline(yintercept = 0, lty = 2)
+
 #temporal correlated random effects
 v <- as.matrix(Projectionmatrix) %*% mod$summary.random$w$mean
+
+
+
 #spatio-temporal random field
 pm <- mod$summary.random$w$mean
 wproj <- inla.mesh.projector (mesh, 
@@ -434,6 +556,19 @@ plot(mod$marginals.hyper[[3]],
      xlab = expression(phi),
      ylab = "Density", type = 'l')
 abline(v = phi, col = 2)
+```
+
+```{r pearson1, echo = FALSE, warning = FALSE, fig.cap= "Check Pearson residuals."}
+# data %>%
+#   mutate(mu = mod$summary.fitted.values$mean,
+#          sigma2 = mu / (1-mu),
+#          Pearson_iid = (Resistent - mu) / sqrt(sigma2)
+# )
+# phi <- mod$summary.hy[3,"mean"]#0.98
+# plot(mod$marginals.hyper[[3]],
+#      xlab = expression(phi),
+#      ylab = "Density", type = 'l')
+# abline(v = phi, col = 2)
 ```
 
 
