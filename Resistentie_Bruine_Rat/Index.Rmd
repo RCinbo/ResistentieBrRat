@@ -113,45 +113,75 @@ library(rprojroot)
 #library(inlatools)
 library(tidyverse)
 library(readxl)
+Hokken <- read_xlsx(find_root_file("data", 
+                                   "Kaartjes", 
+                                   "Hokken", 
+                                   "RowNBtoHokNb.xlsx",
+                                   criterion =
+                                     has_file("ResistentieBrRat.Rproj"))) %>%
+  as.data.frame()
+a <- which(Hokken$Bekken == "BE") 
 BESF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                                         criterion = 
                                            has_file("ResistentieBrRat.Rproj")),
-                   layer = "Beneden_Schelde_fishnet_clip")%>%
-  mutate(BekkenNaam = "Beneden Schelde")
+                   layer = "Beneden_Schelde_fishnet_clip") %>%
+  mutate(BekkenNaam = "Beneden Schelde",
+         Bekkennummer = ifelse(is.na(Hokken[a,'bekkennummer']),
+                               NA,
+                               str_c(Hokken[a,'Bekken'][1], 
+                                     Hokken[a,'bekkennummer'], sep = "")),
+         Bekkenkleur = ifelse(is.na(Hokken[a,'bekkennummer']),
+                              str_c(Hokken[a,'Bekken'][1], 
+                                    Hokken[a,"closestneighbor"]),
+                              str_c(Hokken[a,'Bekken'][1], 
+                                     Hokken[a,'bekkennummer'], sep = ""))) 
+# #Check nummers van de hokken
+# BESF %>% mutate(nb = 1:nrow(BESF))%>%
+#     st_as_sf %>%
+#     st_cast("POLYGON", group_or_split = TRUE, warn = FALSE) %>%
+#     ggplot() +
+#     geom_sf(aes(fill = nb)) +
+#     geom_sf_label(aes(label = nb))
+# BESF %>%
+#     st_as_sf %>%
+#     st_cast("POLYGON", group_or_split = TRUE, warn = FALSE) %>%
+#     ggplot() + geom_sf() +
+#     geom_sf_label(aes(label = Bekkennummer))
+
 BOSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                                         criterion = 
                                            has_file("ResistentieBrRat.Rproj")),
-                   layer = "Boven_Schelde_fishnet_clip")%>%
+                   layer = "Boven_Schelde_fishnet_clip") %>%
   mutate(BekkenNaam = "Boven Schelde")
 BPSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                                         criterion = 
                                            has_file("ResistentieBrRat.Rproj")),
-                   layer = "Brugse_polders_fishnet_clip")%>%
+                   layer = "Brugse_polders_fishnet_clip") %>%
   mutate(BekkenNaam = "Brugse polders")
 DDSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                                         criterion = 
                                            has_file("ResistentieBrRat.Rproj")),
-                   layer = "Dender_fishnet_clip")%>%
+                   layer = "Dender_fishnet_clip") %>%
   mutate(BekkenNaam = "Dender")
 DLSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                                         criterion = 
                                            has_file("ResistentieBrRat.Rproj")),
-                   layer = "Dijle_fishnet_clip")%>%
+                   layer = "Dijle_fishnet_clip") %>%
   mutate(BekkenNaam = "Dijle")
 DMSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                                         criterion = 
                                            has_file("ResistentieBrRat.Rproj")),
-                   layer = "Demer_fishnet_clip")%>%
+                   layer = "Demer_fishnet_clip") %>%
   mutate(BekkenNaam = "Demer")
 GKSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                                         criterion = 
                                            has_file("ResistentieBrRat.Rproj")),
-                   layer = "Gentse_kanalen_fishnet_clip")%>%
+                   layer = "Gentse_kanalen_fishnet_clip") %>%
   mutate(BekkenNaam = "Gense kanalen")
 IZSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                                         criterion = 
                                            has_file("ResistentieBrRat.Rproj")),
-                   layer = "Ijzer_fishnet_clip")%>%
+                   layer = "Ijzer_fishnet_clip") %>%
   mutate(BekkenNaam = "Ijzer")
 LESF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                                         criterion = 
@@ -173,6 +203,7 @@ NESF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                                            has_file("ResistentieBrRat.Rproj")),
                    layer = "Nete_fishnet_clip") %>%
   mutate(BekkenNaam = "Nete")
+
 Hokken <- rbind(BESF, BOSF, BPSF, DDSF, DLSF, DMSF, GKSF, IZSF, LESF, MASF, 
                    MLSF, NESF)#does not work for more than 2
 ```
@@ -426,6 +457,11 @@ map(base_models, "roc") %>%
   map2(rw_order, ~mutate(.x, rw_order = .y)) %>%
   map2(model_type, ~mutate(.x, model = .y)) %>%
   bind_rows() -> auc
+map(base_models, "predictions") %>%
+  map2(dependent_var, ~mutate(.x, dependent_var = .y)) %>%
+  map2(rw_order, ~mutate(.x, rw_order = .y)) %>%
+  map2(model_type, ~mutate(.x, model = .y)) %>%
+  bind_rows() -> predictions
 ```
 
 We fitten vier verschillende Bayesiaanse, spatiale en temporale modellen, steeds met een andere afhankelijke variabele. Bij het eerste model bekijken de resistentie in het algemeen; onze afhankelijke variabele is 1 indien ze minstens één van de mutaties aanwezig is. De andere drie modellen bekijken ieder van de mutaties apart.
@@ -526,6 +562,7 @@ fixed %>%
 
 
 ```{r trends-Resistent}
+require(scales)
 plot_trend <- function(this_depvar) {
   trend %>%
     filter(dependent_var  == this_depvar) %>%
@@ -806,26 +843,5 @@ levelplot(z ~ x * y | fID ,
           main = list("Posterior mean spatial random fields", cex = 1.5))
 ```
 
-
-# ```{r plotphi, echo = FALSE, warning = FALSE, fig.cap= "Posterior dichtheid funtie voor for phi. Als phi=1, dan wordt het aantal resistente dieren in de populatie in jaar t volledig bepaald door het aantal resistente dieren in jaar t-1. Als phi=0, dan wordt het aantal resistente dieren in de populatie in jaar t helemaal niet bepaald door het aantal resistente dieren in jaar t-1."}
-# phi <- modTS$summary.hy[3,"mean"]#0.98
-# plot(modTS$marginals.hyper[[3]],
-#      xlab = expression(phi),
-#      ylab = "Density", type = 'l')
-# abline(v = phi, col = 2)
-# ```
-
-```{r pearson1, echo = FALSE, warning = FALSE, fig.cap= "Check Pearson residuals."}
-# data %>%
-#   mutate(mu = mod$summary.fitted.values$mean,
-#          sigma2 = mu / (1-mu),
-#          Pearson_iid = (Resistent - mu) / sqrt(sigma2)
-# )
-# phi <- mod$summary.hy[3,"mean"]#0.98
-# plot(mod$marginals.hyper[[3]],
-#      xlab = expression(phi),
-#      ylab = "Density", type = 'l')
-# abline(v = phi, col = 2)
-```
 
 
