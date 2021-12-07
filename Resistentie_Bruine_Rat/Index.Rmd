@@ -35,6 +35,8 @@ output:
   INBOmd::gitbook: default
   bookdown::dont_run: default
   INBOmd::ebook: default
+params:
+  load_data: TRUE
 ---
 
 
@@ -113,104 +115,16 @@ library(rprojroot)
 #library(inlatools)
 library(tidyverse)
 library(readxl)
-Hokken <- read_xlsx(find_root_file("data", 
-                                   "Kaartjes", 
-                                   "Hokken", 
-                                   "RowNBtoHokNb.xlsx",
-                                   criterion =
-                                     has_file("ResistentieBrRat.Rproj"))) %>%
-  as.data.frame()
-a <- which(Hokken$Bekken == "BE") 
-BESF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                                        criterion = 
-                                           has_file("ResistentieBrRat.Rproj")),
-                   layer = "Beneden_Schelde_fishnet_clip") %>%
-  mutate(BekkenNaam = "Beneden Schelde",
-         Bekkennummer = ifelse(is.na(Hokken[a,'bekkennummer']),
-                               NA,
-                               str_c(Hokken[a,'Bekken'][1], 
-                                     Hokken[a,'bekkennummer'], sep = "")),
-         Bekkenkleur = ifelse(is.na(Hokken[a,'bekkennummer']),
-                              str_c(Hokken[a,'Bekken'][1], 
-                                    Hokken[a,"closestneighbor"]),
-                              str_c(Hokken[a,'Bekken'][1], 
-                                     Hokken[a,'bekkennummer'], sep = ""))) 
-# #Check nummers van de hokken
-# BESF %>% mutate(nb = 1:nrow(BESF))%>%
-#     st_as_sf %>%
-#     st_cast("POLYGON", group_or_split = TRUE, warn = FALSE) %>%
-#     ggplot() +
-#     geom_sf(aes(fill = nb)) +
-#     geom_sf_label(aes(label = nb))
-# BESF %>%
-#     st_as_sf %>%
-#     st_cast("POLYGON", group_or_split = TRUE, warn = FALSE) %>%
-#     ggplot() + geom_sf() +
-#     geom_sf_label(aes(label = Bekkennummer))
-
-BOSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                                        criterion = 
-                                           has_file("ResistentieBrRat.Rproj")),
-                   layer = "Boven_Schelde_fishnet_clip") %>%
-  mutate(BekkenNaam = "Boven Schelde")
-BPSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                                        criterion = 
-                                           has_file("ResistentieBrRat.Rproj")),
-                   layer = "Brugse_polders_fishnet_clip") %>%
-  mutate(BekkenNaam = "Brugse polders")
-DDSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                                        criterion = 
-                                           has_file("ResistentieBrRat.Rproj")),
-                   layer = "Dender_fishnet_clip") %>%
-  mutate(BekkenNaam = "Dender")
-DLSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                                        criterion = 
-                                           has_file("ResistentieBrRat.Rproj")),
-                   layer = "Dijle_fishnet_clip") %>%
-  mutate(BekkenNaam = "Dijle")
-DMSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                                        criterion = 
-                                           has_file("ResistentieBrRat.Rproj")),
-                   layer = "Demer_fishnet_clip") %>%
-  mutate(BekkenNaam = "Demer")
-GKSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                                        criterion = 
-                                           has_file("ResistentieBrRat.Rproj")),
-                   layer = "Gentse_kanalen_fishnet_clip") %>%
-  mutate(BekkenNaam = "Gense kanalen")
-IZSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                                        criterion = 
-                                           has_file("ResistentieBrRat.Rproj")),
-                   layer = "Ijzer_fishnet_clip") %>%
-  mutate(BekkenNaam = "Ijzer")
-LESF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                                        criterion = 
-                                           has_file("ResistentieBrRat.Rproj")),
-                   layer = "Leie_fishnet_clip") %>%
-  mutate(BekkenNaam = "Leie")
-MASF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                                        criterion = 
-                                           has_file("ResistentieBrRat.Rproj")),
-                   layer = "Maas2_fishnet_clip") %>%
-  mutate(BekkenNaam = "Maas Antwerpen")
-MLSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                                        criterion = 
-                                           has_file("ResistentieBrRat.Rproj")),
-                   layer = "Maas1_fishnet_clip") %>%
-  mutate(BekkenNaam = "Maas Limburg")
-NESF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                                        criterion = 
-                                           has_file("ResistentieBrRat.Rproj")),
-                   layer = "Nete_fishnet_clip") %>%
-  mutate(BekkenNaam = "Nete")
-
-Hokken <- rbind(BESF, BOSF, BPSF, DDSF, DLSF, DMSF, GKSF, IZSF, LESF, MASF, 
-                   MLSF, NESF)#does not work for more than 2
+Hokken <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                     criterion = 
+                                       has_file("ResistentieBrRat.Rproj")),
+                layer = "Hokken") %>%
+  st_transform("EPSG:31370")
 ```
 
 # Data exploratie
 
-```{r InlezenData, echo = FALSE}
+```{r InlezenData, echo = FALSE, eval = !params$load_data}
 data <- read_excel(path = find_root_file("data", 
                                          "2013 - 2019 BMK.xlsx",
                                          criterion = 
@@ -236,6 +150,25 @@ data <- read_excel(path = find_root_file("data",
          MutatieM2 = str_detect(mutatie,regex('M2')),
          MutatieM3 = str_detect(mutatie,regex('M3')))
 data %>% st_as_sf(coords = c("X_lambert", "Y_lambert"), crs = "EPSG:31370") -> data
+data$hok <- sapply(X = 1:nrow(data), FUN = function(x)
+  as.character(st_drop_geometry(
+    Hokken[
+      unlist(st_intersects(data[x,],Hokken)),
+      "Bkknnmm"])
+    )
+  )
+save(data, file = "data/Data.Rdata")
+data %>% 
+  st_drop_geometry() %>%
+  group_by(jaar) %>%
+  summarise(N = n()) %>% 
+  ungroup() -> datajaar
+```
+```{r InlezenData2, echo = FALSE, eval = params$load_data}
+load(find_root_file("data",
+                    "Data.Rdata",
+                    criterion = 
+                      has_file("ResistentieBrRat.Rproj")))
 data %>% 
   st_drop_geometry() %>%
   group_by(jaar) %>%
@@ -329,14 +262,54 @@ KaartSF <- read_sf(dsn = find_root_file("data", "Kaartjes", criterion =
                                            has_file("ResistentieBrRat.Rproj")),
                    layer = "Vlaanderen")
 ggplot() + 
-  geom_sf(data = Hokken, aes(fill = BekkenNaam), alpha = 0.2) + 
+  geom_sf(data = Hokken, aes(fill = BekknNm), alpha = 0.2) + 
   geom_sf(data = data, aes(color = BekkenNaam)) + 
   scale_color_brewer(name = "Bekken", palette = "Paired") +
   scale_fill_brewer(name = "Bekken", palette = "Paired") +
   facet_wrap(vars(jaar), ncol = 2) +
   guides(fill = "none") 
 ```
-
+```{r SpreadingRuimte2, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap = "Geografische weergave gesamplede hokken. Het werkelijke jaar van de vangst werd gebruikt. Indien een hok gesampled werd, werd er nagegaan of the rat zich effectief in het hok waaraan het werd toegewezen bevindt (overlap). "}
+A <- expand.grid(Bekkennummer = unique(Hokken$Bkknklr), 
+                 year = 2013:2019) 
+jaar <- ifelse(is.na(as.numeric(year(data$datum))),
+               data$jaar,
+               as.numeric(year(data$datum)))
+A$Sampled <- sapply(1:nrow(A), FUN = function(x){
+  return(length(which(jaar == A[x,'year'] & 
+                 data$Bekkennummer == A[x,"Bekkennummer"])) > 0)
+})
+A$Sampleoverlap <- sapply(1:nrow(A), FUN = function(x){
+  return(length(which(jaar == A[x,'year'] & 
+                 data$Bekkennummer == A[x,"Bekkennummer"] &
+                   data$hok == A[x,"Bekkennummer"])) > 0)
+})
+Hokken %>%
+  full_join(A, by = c("Bkknnmm" = "Bekkennummer")) -> B
+B$color <- ifelse(is.na(B$Sampled) | !B$Sampled,
+                        "No",
+                        ifelse(B$Sampleoverlap,
+                               "Yes, overlap",
+                               "Yes, no overlap")) 
+B %>% filter(!is.na(year)) %>% mutate(color= as.factor(color)) %>%
+  ggplot() + geom_sf(aes(fill = color, color = color)) + 
+  facet_wrap(vars(year), ncol = 2) +
+  scale_color_discrete(name = "Sampled?") +
+  scale_fill_discrete(name = "Sampled?")
+  
+```
+```{r SpreadingRuimte3, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap = "Indien Locatie match=FALSE, werd de rat toegewezen aan een ander hok dan waar het werd gevangen."}
+ggplot() + 
+  geom_sf(data = Hokken, aes(fill = BekknNm), alpha = 0.2) + 
+  geom_sf(data = data, aes(color = ifelse(is.na(Bekkennummer == hok),
+                                    FALSE,
+                                    Bekkennummer == hok))
+          ) + 
+  scale_fill_brewer(name = "Bekken", palette = "Paired") +
+  scale_color_brewer(name = "Locatie match") +
+  facet_wrap(vars(jaar), ncol = 2) +
+  guides(fill = "none") 
+```
 ## Resistentie
 
 Figuur \@ref(fig:Samenvattingresistentie) toont, voor ieder van de bekken en voor ieder jaar de proportie ratten die resistent waren door minstens één van de drie gekende genetische mutaties. Figuur \@ref(fig:Samenvattingresistentie2) toont, voor ieder van de bekken en voor ieder jaar de proportie ratten die resistent waren door ieder van de drie gekende genetische mutaties. Het is duidelijk dat mutatie 3 het minst voorkomt en mutatie 1 het meeste. In het Demerbekken en in mindere mate ook Dijle en Maas Limburg komt mutatie 2 vaker voor.
@@ -378,7 +351,7 @@ dataResistentie %>%
 Figuur \@ref(fig:SamenvattingresistentieSF) toont dieren met minstens één van de drie mutaties in het rood op de kaart. 
 
 ```{r SamenvattingresistentieSF, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap="Resistentie per bekken, per jaar."}
-ggplot() + geom_sf(data = Hokken, aes(fill = BekkenNaam), alpha = 0.2) +
+ggplot() + geom_sf(data = Hokken, aes(fill = BekknNm), alpha = 0.2) +
   geom_sf(data = data, aes(color = Resistent), size = 0.8) + 
   scale_color_manual(name = 'Resistent', 
                        breaks = c(TRUE, FALSE),
@@ -419,7 +392,7 @@ data %>% group_by(jaar,  BekkenNaam) %>% st_drop_geometry() %>%
 ```{r load-models}
 find_root_file("output",criterion = 
                            has_file("ResistentieBrRat.Rproj")) %>%
-    list.files(full.names = TRUE, recursive = TRUE)%>%
+    list.files(full.names = TRUE, recursive = TRUE) %>%
   map(readRDS) -> base_models
 dependent_var <- map_chr(base_models, "dependent")
 waic <- map_dbl(base_models, "waic")
@@ -481,7 +454,7 @@ ggplot() + gg(mesh) + coord_fixed() +
 ```
 
 ```{r auc, fig.cap = "Area under the curve. Higher is better."}
-auc %>%
+auc %>% 
     pivot_wider(names_from = parameter, values_from = auc) %>%
     mutate(
         dependent_var = reorder(dependent_var, estimate),
@@ -489,7 +462,7 @@ auc %>%
     ) %>%
     ggplot(
         aes(
-            x = estimate, xmin = lcl, xmax = ucl, y = dependent_var
+            x = estimate, xmin = lcl, xmax = ucl, y = as.factor(dependent_var)
         )
     ) +
     geom_errorbarh(position = position_dodge(width = 0.5)) +
@@ -649,10 +622,45 @@ hyperpar %>%
 
 Not in the current models?
 
+## Model predictions
 
+```{r pred-Resistent, fig.height = 12, fig.width=10}
+Hokken %>%
+  right_join(predictions[predictions$dependent_var == "Resistent",],
+             by = c('Bkknklr' = 'location')) %>%
+  ggplot() + geom_sf(aes(fill = mean, color= mean)) +
+  facet_wrap(vars(year), nrow = 3) +
+  ggtitle('Resistentie')
+```
+
+
+```{r pred-M1, fig.height = 12, fig.width=10}
+Hokken %>%
+  right_join(predictions[predictions$dependent_var == "MutatieM1",],
+             by = c('Bkknklr' = 'location')) %>%
+  ggplot() + geom_sf(aes(fill = mean, color= mean)) +
+  facet_wrap(vars(year), nrow = 3) +
+  ggtitle('MutatieM1')
+```
+```{r pred-M2, fig.height = 12, fig.width=10}
+Hokken %>%
+  right_join(predictions[predictions$dependent_var == "MutatieM2",],
+             by = c('Bkknklr' = 'location')) %>%
+  ggplot() + geom_sf(aes(fill = mean, color= mean)) +
+  facet_wrap(vars(year), nrow = 3) +
+  ggtitle('MutatieM2')
+```
+```{r pred-M3, fig.height = 12, fig.width=10}
+Hokken %>%
+  right_join(predictions[predictions$dependent_var == "MutatieM3",],
+             by = c('Bkknklr' = 'location')) %>%
+  ggplot() + geom_sf(aes(fill = mean, color= mean)) +
+  facet_wrap(vars(year), nrow = 3) +
+  ggtitle('MutatieM3')
+```
 
 ## Rattenresistentie in Vlaanderen
-In dit hoofdstuk testen we een bayesiaans model met spatiale en temporale correlaties. De afhankelijke variabele, resistentie $Y_r$, is 1 indien er minstens één mutatie aanwezig is en anders 0. Voor de temporale component gebruiken we het feitelijke jaar waarin de rat werd gevangen en niet het jaar waaraan de rat werd toegewezen. Daarnaast gebruiken we ook de feitelijke x-y coördinaten in plaats van het hok waar de rat werd aan toegewezen. Deze x-y coordinaten kunnen afwijken van de echte vanglocatie; indien de chte vanglocatie niet gekend was, werd het centrum van het hok ingevuld.
+In dit hoofdstuk testen we een bayesiaans model met spatiale en temporale correlaties. De afhankelijke variabele, resistentie $Y_r$, is 1 indien er minstens één mutatie aanwezig is en anders 0. Voor de temporale component gebruiken we het feitelijke jaar waarin de rat werd gevangen en niet het jaar waaraan de rat werd toegewezen. Daarnaast gebruiken we ook de feitelijke x-y coördinaten in plaats van het hok waar de rat werd aan toegewezen. Deze x-y coordinaten kunnen afwijken van de echte vanglocatie; indien de echte vanglocatie niet gekend was, werd het centrum van het hok ingevuld.
 
 $$R_{st}=B(\pi_{st})$$
 $$E(R_{st})=\pi_{st}$$

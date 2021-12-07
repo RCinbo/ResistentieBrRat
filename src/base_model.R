@@ -24,11 +24,13 @@ base_model <- function(
   base_data %>%
     rename(X = X_lambert,
            Y = Y_lambert,
-           year = jaar,
-           location = Bekkennummer
-           ) %>%
+           location = Bekkennummer) %>%
     mutate(location = as.factor(location)) %>%
     mutate(
+      year = ifelse(is.na(year(datum)),
+                    jaar,
+                    year(datum)
+      ),
       iyear = .data$year - min(.data$year) + 1,
       iyear2 = .data$iyear,
       cyear = .data$year - center_year,

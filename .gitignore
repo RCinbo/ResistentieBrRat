@@ -6,5 +6,7 @@ css/*
 Resistentie_Bruine_Rat/Resistentie-Bruine-Rat_files/*
 Resistentie_Bruine_Rat/css/*
 Resistentie_Bruine_Rat/libs/*
+data/
 *.html
+*.pdf
 *.log

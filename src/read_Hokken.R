@@ -206,8 +206,10 @@ Hokken <- rbind(BESF, BOSF, BPSF, DDSF, DLSF, DMSF, GKSF, IZSF, LESF, MASF,
   mutate(BekkenNaam = as.factor(BekkenNaam),
          Bekkennummer = as.factor(Bekkennummer),
          Bekkenkleur = as.factor(Bekkenkleur))
-#Hokken <- sf::st_cast(Hokken, "MULTIPOLYGON")
-read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
-                             criterion =
-                               has_file("ResistentieBrRat.Rproj")),
-        layer = "Beneden_Schelde_fishnet_clip")
+write_sf(obj = Hokken,
+         dsn = find_root_file("data", "Kaartjes", "Hokken", "Hokken.shp",
+                              criterion =
+                                has_file("ResistentieBrRat.Rproj")),
+         delete_dsn = TRUE)
+
+
