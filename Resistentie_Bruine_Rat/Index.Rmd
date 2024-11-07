@@ -110,15 +110,20 @@ if (interactive()) {
 library(INLA)
 library(inlabru)
 library(sf)
-library(rgdal)
+# library(rgdal) ## was removed from CRAN
 library(rprojroot)
 #library(inlatools)
 library(tidyverse)
 library(readxl)
+
+devtools::install_version("tidyr", version = "1.1.3")  ## need this version for the complete function to work
+library(tidyr)
+
 Hokken <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                                      criterion = 
-                                       has_file("ResistentieBrRat.Rproj")),
-                layer = "Hokken") %>%
+                                       has_file("ResistentieBrRat.Rproj"))
+                    ,layer = "Hokken"
+                ) %>%
   st_transform("EPSG:31370")
 ```
 
@@ -164,6 +169,8 @@ data %>%
   summarise(N = n()) %>% 
   ungroup() -> datajaar
 ```
+
+
 ```{r InlezenData2, echo = FALSE, eval = params$load_data}
 load(find_root_file("data",
                     "Data.Rdata",
@@ -186,9 +193,9 @@ Een overzicht van alle datapunten kan gevonden worden op [https://rattenbestrijd
 ```{r SamenvattingData, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap = "Aantal gevangen ratten per jaar, per bekken."}
 data %>% group_by(BekkenNaam, jaar) %>%
   summarise(N = n()) %>% 
-  complete(BekkenNaam, jaar) %>%
+  tidyr::complete(BekkenNaam, jaar) %>%
   ungroup() %>%
-  mutate(N = ifelse(is.na(N),0,N)) %>%
+  mutate(N = ifelse(is.na(N),0,N)) %>% ## Dit geeft de impressie dat als er geen observaties waren dat ze eigenlijk geen resistentie hebben gevonden 
   ggplot + geom_line(aes(color = BekkenNaam, x = jaar, y = N), size = 1) + 
   scale_x_continuous(breaks = 2013:2019) +  scale_y_continuous(breaks = seq(0,120,20), limits = c(0,120)) + 
   theme_bw() + scale_color_brewer(name = "", palette = "Paired") +
@@ -244,7 +251,7 @@ data %>%
 data %>%
   mutate(jaardatum = as.factor(year(datum)),
          datum = as.Date(datum)) %>%
-  filter(!is.na(jaardatum) &  jaardatum != jaar) %>%
+  dplyr::filter(!is.na(jaardatum) &  jaardatum != jaar) %>%
   ggplot() + 
   geom_jitter(aes(x = datum, y = jaar, color = factor(jaar))) +
   scale_x_date(breaks = "1 year", minor_breaks = "1 month") +
@@ -269,6 +276,11 @@ ggplot() +
   facet_wrap(vars(jaar), ncol = 2) +
   guides(fill = "none") 
 ```
+
+
+
+
+
 ```{r SpreadingRuimte2, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap = "Geografische weergave gesamplede hokken. Het werkelijke jaar van de vangst werd gebruikt. Indien een hok gesampled werd, werd er nagegaan of the rat zich effectief in het hok waaraan het werd toegewezen bevindt (overlap). "}
 A <- expand.grid(Bekkennummer = unique(Hokken$Bkknklr), 
                  year = 2013:2019) 
@@ -291,13 +303,14 @@ B$color <- ifelse(is.na(B$Sampled) | !B$Sampled,
                         ifelse(B$Sampleoverlap,
                                "Yes, overlap",
                                "Yes, no overlap")) 
-B %>% filter(!is.na(year)) %>% mutate(color= as.factor(color)) %>%
+B %>% dplyr::filter(!is.na(year)) %>% mutate(color= as.factor(color)) %>%
   ggplot() + geom_sf(aes(fill = color, color = color)) + 
   facet_wrap(vars(year), ncol = 2) +
   scale_color_discrete(name = "Sampled?") +
   scale_fill_discrete(name = "Sampled?")
   
 ```
+
 ```{r SpreadingRuimte3, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap = "Indien Locatie match=FALSE, werd de rat toegewezen aan een ander hok dan waar het werd gevangen."}
 ggplot() + 
   geom_sf(data = Hokken, aes(fill = BekknNm), alpha = 0.2) + 
@@ -315,7 +328,7 @@ ggplot() +
 Figuur \@ref(fig:Samenvattingresistentie) toont, voor ieder van de bekken en voor ieder jaar de proportie ratten die resistent waren door minstens één van de drie gekende genetische mutaties. Figuur \@ref(fig:Samenvattingresistentie2) toont, voor ieder van de bekken en voor ieder jaar de proportie ratten die resistent waren door ieder van de drie gekende genetische mutaties. Het is duidelijk dat mutatie 3 het minst voorkomt en mutatie 1 het meeste. In het Demerbekken en in mindere mate ook Dijle en Maas Limburg komt mutatie 2 vaker voor.
 
 ```{r Samenvattingresistentie, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap="Resistentie per bekken, per jaar."}
-data %>% group_by(BekkenNaam, jaar) %>%
+data %>% group_by(BekkenNaam, jaar) %>%  ## jaar is hier toegewezen jaar en niet gevangen jaar
   summarise(Resistent = mean(Resistent),
             M1 = mean(MutatieM1),
             M2 = mean(MutatieM2),
@@ -369,7 +382,7 @@ data %>% group_by(jaar) %>% st_drop_geometry() %>%
   summarize(Resistentie = mean(Resistent),
          M1 = mean(MutatieM1),
          M2 = mean(MutatieM2),
-         M3 = mean(MutatieM3)) %>%
+         M3 = mean(MutatieM3)) %>%    ### Gaat rare zaken geven door NA gelijk te stellen aan 0. Na is Na en niet 0. missing data niet gelijk zetten aan 0. Gaat ook rare zaken geven in het model
   pivot_longer(cols = -1, names_to = "Type", values_to = "Proportie") %>%
   ggplot() + geom_line(aes(color = Type, x = jaar, y = Proportie)) +
   theme_bw() +
@@ -441,10 +454,9 @@ We fitten vier verschillende Bayesiaanse, spatiale en temporale modellen, steeds
 
 Voor ieder van de modellen gebruiken we verder dezelfde dataset en dezelfde mesh met een max edge (grootst toegestane edge lengte) van `r print(MeshMaxEdge)` tot `r sprintf("%d",3*MeshMaxEdge)` en een cutoff (minimum toegestane afstand tussen punten) van `r MeshMaxEdge/5` (Figuur \@ref(fig:INLAmeshShape)).
 ```{r INLAmeshShape, echo = FALSE, warning = FALSE}
-Kaart <- readOGR(dsn = find_root_file("data", "Kaartjes", criterion = 
+Kaart <- read_sf(dsn = find_root_file("data", "Kaartjes", criterion = 
                                            has_file("ResistentieBrRat.Rproj")),
-                 layer = "Vlaanderen", 
-                 verbose = FALSE)
+                 layer = "Vlaanderen")
 
 mesh <- inla.mesh.2d(boundary = Kaart, 
                      max.edge = c(MeshMaxEdge, 3*MeshMaxEdge), 
