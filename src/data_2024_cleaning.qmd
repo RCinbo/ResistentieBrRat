@@ -1,0 +1,359 @@
+---
+title: "Data cleaning"
+author: "Robrecht Dockx"
+format: 
+  pdf: 
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    include-in-header:
+      text: |
+        \usepackage{lscape}
+        \newcommand{\blandscape}{\begin{landscape}}
+        \newcommand{\elandscape}{\end{landscape}}
+project:
+  output-dir: output/reports/
+editor: visual
+---
+
+\newpage
+
+
+
+```{r libraries, echo = FALSE, warning = FALSE, message=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, 
+                      warning = FALSE, 
+                      error = FALSE, 
+                      message = FALSE)
+
+library(readxl)
+library(tidyverse)
+library(sp)
+library(spatial)
+library(sf)
+library(dplyr)
+library(kableExtra)
+library(rprojroot)
+library(naniar)
+library(WriteXLS)
+```
+# Summary
+
+The aim of this report is to perform an initial data analysis of the  `Data_Staalname_2024.xlsx` dataset. Some issues should be resolved: 
+
+- 13 river basis were found in the dataset. Previous dataset (2013-2019) only holds 12 river basins. 
+- 5 locations were found for more than 1 rat. Previous dataset (2013-2019) has got 16 locations for more than 1 rat. 
+- There are 40 rats where the location is present but there is no entry for mutation
+- There are 17 rats who have a no location but have an entry for mutation.
+
+\newpage
+
+# Reading in the data
+
+```{r read_in_data}
+
+file <- "Data_Staalname_2024.xlsx"
+
+path <- find_root_file("data", file,
+                        criterion = has_file("ResistentieBrRat.Rproj"))
+
+data_staalname_2024_raw <- read_excel(path = path)
+
+file <- "2013 - 2019 BMK.xlsx"
+
+path <- find_root_file("data", file,
+                        criterion = has_file("ResistentieBrRat.Rproj"))
+
+data_staalname_old <- read_excel(path = path)
+
+
+```
+
+The file "Data_Staalname_2024.xlsx" was read into RStudio. This dataset holds `r nrow(data_staalname_2024_raw)` observations and `r ncol(data_staalname_2024_raw)` columns (`r knitr::combine_words(colnames(data_staalname_2024_raw))`). The colum names `ID`, `Hok`, and `Genotype` were replaced by `RN`, `Bekkennummer` and `mutatie`. A new variable (`Bekken`) was created which holds the first 2 characters of the variable `Hok`
+
+```{r}
+data_staalname_2024 <- data_staalname_2024_raw %>% rename(RN = ID, 
+                                                      mutatie = Genotype, 
+                                                      Bekkennummer = Hok) %>% 
+  mutate(Bekken = str_sub(Bekkennummer, 1, 2))
+
+head(data_staalname_2024)
+```
+
+
+
+
+# Converting coordinates to Lambert 72
+
+## Observed coordinates
+
+
+
+```{r converting_coordinates}
+
+coordinates <- data.frame(RN = data_staalname_2024$RN, 
+                          lon = data_staalname_2024$Lon, 
+                          lat = data_staalname_2024$Lat)
+
+coordinates_sf <- st_as_sf(coordinates %>% na.omit(),
+                           coords = c("lon", "lat"), 
+                           crs = st_crs(4326))
+
+coordinates_lambert <- st_transform(coordinates_sf, crs = st_crs(31370))
+
+coordinates_lambert <- cbind(st_drop_geometry(coordinates_lambert),
+                             st_coordinates(coordinates_lambert))
+
+## Coordinates center
+
+coordinates_cent <- data.frame(RN = data_staalname_2024$RN, 
+                          lon = data_staalname_2024$Lon_Centr, 
+                          lat = data_staalname_2024$Lat_Centr)
+
+coordinates_cent_sf <- st_as_sf(coordinates_cent %>% na.omit(), 
+                                coords = c("lon", "lat"),
+                                crs = st_crs(4326))
+
+coordinates_cent_lambert <- st_transform(coordinates_cent_sf, 
+                                         crs = st_crs(31370))
+
+coordinates_cent_lambert <- cbind(st_drop_geometry(coordinates_cent_lambert),
+                        st_coordinates(coordinates_cent_lambert))
+
+## merging 
+
+
+data_staalname_2024 <- merge(merge(data_staalname_2024, coordinates_cent_lambert, 
+                             by = "RN", 
+                             all = TRUE), 
+                             coordinates_lambert, by = "RN", all = TRUE)
+data_staalname_2024 <- data_staalname_2024 %>% rename(X_lambert_cent = X.x,
+                                                      Y_lambert_cent = Y.x, 
+                                                      X_lambert = X.y,
+                                                      Y_lambert = Y.y)
+
+n_only_center <- data_staalname_2024 %>% filter(is.na(X_lambert), 
+                                                !is.na(X_lambert_cent))
+
+data_staalname_2024 <- data_staalname_2024 %>% 
+  mutate(jaar = 2024, mutatie = toupper(mutatie), 
+         X_lambert = ifelse(is.na(X_lambert), X_lambert_cent, X_lambert), 
+         Y_lambert = ifelse(is.na(Y_lambert), Y_lambert_cent, Y_lambert)) %>% 
+  select(RN, Bekken, Bekkennummer, Datum, jaar, X_lambert, Y_lambert, mutatie, X_lambert_cent,
+         Y_lambert_cent)
+
+missing_coord <- data_staalname_2024 %>% filter(is.na(X_lambert))
+
+```
+
+
+The dataset holds two sets of coordinates (`Lat`, `Lon` and `Lat_centr`, `Lon_Centr`). Both coordinates sets hold a value for the longitude (`Lon`) and latitude (`Lat`). These were converted to the Lambert 72 coordinate system.  The first set (`Lat`, `Lon`) reflects the exact position where the rat was caught. The other set provides us the location of the center of the block where the rat was caught. The exact location of each rat was used unless it was not registered. In `r nrow(n_only_center)` cases, the location of the rat was set to the location of the center of the block, when present, where the rat was caught. It has to be noted that this might have an influence on the spatial correlation depending on the size of the block.  After this imputation, `r nrow(missing_coord)` rats still did have no information about their location. 
+
+# Data exploration
+
+## All unique RN
+
+```{r all_unique_RN, include = FALSE}
+
+length(unique(data_staalname_2024$RN)) == nrow(data_staalname_2024)
+
+length(unique(data_staalname_old$RN)) == nrow(data_staalname_old)
+
+```
+
+In total `r length(unique(data_staalname_2024$RN))` rats were included in this study. No duplicate rat numbers (`RN`) were detected. 
+
+\blandscape
+
+## Amount of river basins
+
+```{r, include = FALSE}
+n_bekken <- length(unique(na.omit(data_staalname_2024$Bekken)))
+n_bekken_old <- length(unique(na.omit(data_staalname_old$Bekken)))
+n_bekken == 13
+n_bekken_old == 13 
+
+## N with no bekken present 
+n_obs_no_bekken <- sum(is.na(data_staalname_2024$Bekken))
+rats_missing_bekken <- data_staalname_2024[which(
+  is.na(data_staalname_2024$Bekken)), ]
+
+# rats_missing_bekken_olds <- data_staalname_2024[which(
+#   is.na(data_staalname_old$Bekken)), ]
+# 
+# n_obs_no_bekken_old <- sum(is.na(data_staalname_old$Bekken))
+
+### Which with no bekken have a value for mutatie
+value_mutatie <- length(na.omit((rats_missing_bekken$mutatie)))
+value_coord <- length(na.omit(rats_missing_bekken$X_lambert))
+
+tbl_missing_rats <- rats_missing_bekken %>% filter(!is.na(mutatie))
+
+```
+
+
+In total `r length(unique(na.omit(data_staalname_2024$Bekken)))` river basins were monitored: `r knitr::combine_words(unique(na.omit(data_staalname_2024$Bekken)))`. `r n_obs_no_bekken` rats did not show any value for river basin. Of these `r  n_obs_no_bekken`, `r value_mutatie` do have a value for `mutatie` however none have a value for their coordinates. @tbl-rat_missing_mut shows the rats with a value for mutation but have no coordinates. These rats should be checked and when possible complemented with their locations. 
+It has to be noted that the data of 2013-2019 only holds `r length(unique(na.omit(data_staalname_old$Bekken)))` river basins (`r knitr::combine_words(unique(na.omit(data_staalname_old$Bekken)))`)
+
+
+```{r tbl_rat_missing_mut}
+#| label: tbl-rat_missing_mut
+#| tbl-cap: "Rats with missing value for river basin but with a value for mutation"
+
+tbl_missing_rats %>% kable(booktabs = TRUE) %>% 
+  kable_styling(latex_options = c("scale_down", "HOLD_position"))
+```
+
+\elandscape
+
+\newpage
+
+
+```{r}
+## Use of center of the block
+data_centered <- data_staalname_2024 %>% filter(X_lambert == X_lambert_cent &
+                                                Y_lambert == Y_lambert_cent) %>% 
+  select(RN) %>% summarise(n = n()) %>% select(n)
+ 
+```
+
+\newpage
+
+\blandscape
+
+## Unique coordinates
+
+```{r, include = FALSE}
+
+length(unique(data_staalname_2024$X_lambert)) == 
+  length(unique(data_staalname_2024$Y_lambert))
+
+length(unique(na.omit(data_staalname_2024$X_lambert))) == 
+  length(na.omit(data_staalname_2024$X_lambert))
+
+rats_multi <- data_staalname_2024 %>% 
+  select(X_lambert, Y_lambert, RN) %>%
+  group_by(X_lambert, Y_lambert) %>% 
+  summarize(n = n(), .groups = "drop")  %>% 
+  filter(n > 1)
+
+data_multi_loc <- data_staalname_2024 %>% 
+  inner_join(rats_multi, 
+             by = c("X_lambert", "Y_lambert")) %>% 
+  subset(!is.na(X_lambert))
+
+
+length(unique(data_staalname_old$X_lambert)) == 
+  length(unique(data_staalname_old$Y_lambert))
+
+length(unique(na.omit(data_staalname_old$X_lambert))) == 
+  length(na.omit(data_staalname_old$X_lambert))
+
+rats_multi_old <- data_staalname_old %>% 
+  select(RN, X_lambert, jaar, Y_lambert) %>%
+  group_by(X_lambert, Y_lambert, jaar) %>% 
+  summarize(n = n(), .groups = "drop")  %>% 
+  filter(n > 1)
+
+data_multi_loc_old <- data_staalname_old %>%
+  inner_join(rats_multi_old, 
+             by = c("X_lambert", "Y_lambert", "jaar")) 
+
+
+
+```
+
+Since each rat was caught in a different block, we could expect that all coordinates would differ from each other. However, `r length(na.omit(rats_multi$X_lambert))` locations were found for more than one rat. These entries should be checked (@tbl-double_loc_2024). Of importance is identifying the correct rat since several rats have the same location but a different value for mutation and RN. `r length(na.omit(rats_multi_old$X_lambert))` identical locations were found for several  years (@tbl-double_loc_old) in the dataset of 2013-2019. These observations should be checked as well. 
+
+
+```{r tbl_double_loc}
+#| label: tbl-double_loc_2024
+#| tbl-cap: "Rats with identical locations"
+
+data_multi_loc %>% arrange(X_lambert) %>% select(!n) %>% 
+  kable(booktabs = TRUE) %>% 
+  kable_styling(latex_options = c("scale_down", "HOLD_position"))
+```
+\elandscape
+\newpage 
+
+
+```{r tbl_double_loc}
+#| label: tbl-double_loc_old
+#| tbl-cap: "Rats with identical locations in the 2013-2019 dataset."
+
+data_multi_loc_old %>% arrange(X_lambert) %>% select(!n) %>% 
+  kable(booktabs = TRUE) %>% 
+  kable_styling(latex_options = c("scale_down", "HOLD_position"))
+```
+
+
+## Missingness
+
+@fig-missingness shows the location of the missing data in the dataset. We notice that no entries were given for de variable "Datum". The variables `X_lambert`, `Y_lambert`, and `mutatie` show a similar degree of missingness. Several observations have missingness for multiple variables (@fig-missingnesspattern) On average 31.4% of the dataset is missing. There are several data points that should be double checked: 
+
+- There are 40 rats where the location is present but there is no entry for mutation 
+- There are 17 rats who have a no location but have an entry for mutation. 
+
+It has to be checked if the data of these observations could be added to the dataset. Based on @fig-location_missingness we can see that the missingness in mutation is associated with a specific location. 
+
+In comparison, only 0.4% of the data is missing in the 2013-2019 dataset (@fig-missingness_old). 
+
+```{r, plot_missing}
+#| label: fig-missingness
+#| fig-cap: "Missingness in the dataset"
+vis_miss(data_staalname_2024)
+```
+```{r, plot_missing_old}
+#| label: fig-missingness_old
+#| fig-cap: "Missingness in the dataset 2013-2019"
+vis_miss(data_staalname_old)
+```
+
+```{r, plot_missing_pattern}
+#| label: fig-missingnesspattern
+#| fig-cap: "Missingness pattern in the dataset"
+
+gg_miss_upset(data_staalname_2024, nsets = 10, 
+              nintersect = n_var_miss(data_staalname_2024))
+```
+
+
+```{r fig_miss_location}
+#| label: fig-location_missingness
+#| fig-cap: "Missingness of the coordinates for each level of muation"
+
+ggplot(data_staalname_2024,
+       aes(x = X_lambert,
+           y = Y_lambert)) +
+ geom_miss_point() + 
+ facet_wrap(~mutatie)
+```
+
+```{r combining_datasets, eval = !file.exists(find_root_file("data", "data_2013_2024.xls", criterion = has_file("ResistentieBrRat.Rproj")))}
+
+## export combined dataset without observations with missing locations. 
+## all data locations with multiple rats are still in the data 
+
+data_2013_2024 <- data_staalname_2024 %>% 
+  select(!c(X_lambert_cent, Y_lambert_cent)) %>%  subset(!is.na(X_lambert) & 
+                                                         !is.na(Y_lambert)) %>%
+  rename(datum = Datum) %>% mutate(datum = as.POSIXct.Date(datum)) %>% 
+  merge(data_staalname_old %>% mutate(RN = as.character(RN)), 
+                                       by = c("RN", "datum", "Bekken", 
+                                              "Bekkennummer", "X_lambert", 
+                                              "Y_lambert", "mutatie", "jaar"),
+        all = TRUE)
+
+
+file <- "data_2013_2024.xls"
+path <- find_root_file("data", file,
+                        criterion = has_file("ResistentieBrRat.Rproj"))
+
+
+WriteXLS(data_2013_2024, path)
+
+
+```
+
