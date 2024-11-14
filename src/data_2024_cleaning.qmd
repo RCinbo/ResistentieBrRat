@@ -18,8 +18,6 @@ editor: visual
 
 \newpage
 
-
-
 ```{r libraries, echo = FALSE, warning = FALSE, message=FALSE}
 
 knitr::opts_chunk$set(echo = FALSE, 
@@ -38,14 +36,15 @@ library(rprojroot)
 library(naniar)
 library(WriteXLS)
 ```
+
 # Summary
 
-The aim of this report is to perform an initial data analysis of the  `Data_Staalname_2024.xlsx` dataset. Some issues should be resolved: 
+The objective of this report is to conduct an initial data analysis of the Data_Staalname_2024.xlsx dataset. During this analysis, several points of attention were identified for future review and clarification:
 
-- 13 river basis were found in the dataset. Previous dataset (2013-2019) only holds 12 river basins. 
-- 5 locations were found for more than 1 rat. Previous dataset (2013-2019) has got 16 locations for more than 1 rat. 
-- There are 40 rats where the location is present but there is no entry for mutation
-- There are 17 rats who have a no location but have an entry for mutation.
+- The dataset includes 13 river basins, whereas the previous dataset (2013-2019) contained 12 river basins. This discrepancy warrants further investigation.
+- Five locations in the dataset are associated with more than one rat. In the previous dataset (2013-2019), 16 such locations were recorded.
+- There are 40 cases where the location of a rat is recorded, but no mutation entry is provided.
+- Conversely, 17 cases were identified where mutation entries are present, but no location information is recorded.
 
 \newpage
 
@@ -81,14 +80,9 @@ data_staalname_2024 <- data_staalname_2024_raw %>% rename(RN = ID,
 head(data_staalname_2024)
 ```
 
-
-
-
 # Converting coordinates to Lambert 72
 
 ## Observed coordinates
-
-
 
 ```{r converting_coordinates}
 
@@ -147,8 +141,7 @@ missing_coord <- data_staalname_2024 %>% filter(is.na(X_lambert))
 
 ```
 
-
-The dataset holds two sets of coordinates (`Lat`, `Lon` and `Lat_centr`, `Lon_Centr`). Both coordinates sets hold a value for the longitude (`Lon`) and latitude (`Lat`). These were converted to the Lambert 72 coordinate system.  The first set (`Lat`, `Lon`) reflects the exact position where the rat was caught. The other set provides us the location of the center of the block where the rat was caught. The exact location of each rat was used unless it was not registered. In `r nrow(n_only_center)` cases, the location of the rat was set to the location of the center of the block, when present, where the rat was caught. It has to be noted that this might have an influence on the spatial correlation depending on the size of the block.  After this imputation, `r nrow(missing_coord)` rats still did have no information about their location. 
+The dataset holds two sets of coordinates (`Lat`, `Lon` and `Lat_centr`, `Lon_Centr`). Both coordinates sets hold a value for the longitude (`Lon`) and latitude (`Lat`). These were converted to the Lambert 72 coordinate system. The first set (`Lat`, `Lon`) reflects the exact position where the rat was caught. The other set provides us the location of the center of the block where the rat was caught. The exact location of each rat was used unless it was not registered. In `r nrow(n_only_center)` cases, the location of the rat was set to the location of the center of the block, when present, where the rat was caught. It has to be noted that this might have an influence on the spatial correlation depending on the size of the block. After this imputation, `r nrow(missing_coord)` rats still did have no information about their location.
 
 # Data exploration
 
@@ -162,7 +155,7 @@ length(unique(data_staalname_old$RN)) == nrow(data_staalname_old)
 
 ```
 
-In total `r length(unique(data_staalname_2024$RN))` rats were included in this study. No duplicate rat numbers (`RN`) were detected. 
+In total `r length(unique(data_staalname_2024$RN))` rats were included in this study. No duplicate rat numbers (`RN`) were detected.
 
 \blandscape
 
@@ -192,10 +185,7 @@ tbl_missing_rats <- rats_missing_bekken %>% filter(!is.na(mutatie))
 
 ```
 
-
-In total `r length(unique(na.omit(data_staalname_2024$Bekken)))` river basins were monitored: `r knitr::combine_words(unique(na.omit(data_staalname_2024$Bekken)))`. `r n_obs_no_bekken` rats did not show any value for river basin. Of these `r  n_obs_no_bekken`, `r value_mutatie` do have a value for `mutatie` however none have a value for their coordinates. @tbl-rat_missing_mut shows the rats with a value for mutation but have no coordinates. These rats should be checked and when possible complemented with their locations. 
-It has to be noted that the data of 2013-2019 only holds `r length(unique(na.omit(data_staalname_old$Bekken)))` river basins (`r knitr::combine_words(unique(na.omit(data_staalname_old$Bekken)))`)
-
+In total `r length(unique(na.omit(data_staalname_2024$Bekken)))` river basins were monitored: `r knitr::combine_words(unique(na.omit(data_staalname_2024$Bekken)))`. `r n_obs_no_bekken` rats did not show any value for river basin. Of these `r  n_obs_no_bekken`, `r value_mutatie` do have a value for `mutatie` however none have a value for their coordinates. @tbl-rat_missing_mut shows the rats with a value for mutation but have no coordinates. These rats should be checked and when possible complemented with their locations. It has to be noted that the data of 2013-2019 only holds `r length(unique(na.omit(data_staalname_old$Bekken)))` river basins (`r knitr::combine_words(unique(na.omit(data_staalname_old$Bekken)))`)
 
 ```{r tbl_rat_missing_mut}
 #| label: tbl-rat_missing_mut
@@ -208,7 +198,6 @@ tbl_missing_rats %>% kable(booktabs = TRUE) %>%
 \elandscape
 
 \newpage
-
 
 ```{r}
 ## Use of center of the block
@@ -264,8 +253,7 @@ data_multi_loc_old <- data_staalname_old %>%
 
 ```
 
-Since each rat was caught in a different block, we could expect that all coordinates would differ from each other. However, `r length(na.omit(rats_multi$X_lambert))` locations were found for more than one rat. These entries should be checked (@tbl-double_loc_2024). Of importance is identifying the correct rat since several rats have the same location but a different value for mutation and RN. `r length(na.omit(rats_multi_old$X_lambert))` identical locations were found for several  years (@tbl-double_loc_old) in the dataset of 2013-2019. These observations should be checked as well. 
-
+Since each rat was caught in a different block, we could expect that all coordinates would differ from each other. However, `r length(na.omit(rats_multi$X_lambert))` locations were found for more than one rat. These entries should be checked (@tbl-double_loc_2024). Of importance is identifying the correct rat since several rats have the same location but a different value for mutation and RN. `r length(na.omit(rats_multi_old$X_lambert))` identical locations were found for several years (@tbl-double_loc_old) in the dataset of 2013-2019. These observations should be checked as well.
 
 ```{r tbl_double_loc}
 #| label: tbl-double_loc_2024
@@ -275,10 +263,11 @@ data_multi_loc %>% arrange(X_lambert) %>% select(!n) %>%
   kable(booktabs = TRUE) %>% 
   kable_styling(latex_options = c("scale_down", "HOLD_position"))
 ```
+
+```{=tex}
 \elandscape
-\newpage 
-
-
+\newpage
+```
 ```{r tbl_double_loc}
 #| label: tbl-double_loc_old
 #| tbl-cap: "Rats with identical locations in the 2013-2019 dataset."
@@ -288,27 +277,27 @@ data_multi_loc_old %>% arrange(X_lambert) %>% select(!n) %>%
   kable_styling(latex_options = c("scale_down", "HOLD_position"))
 ```
 
-
 ## Missingness
 
-@fig-missingness shows the location of the missing data in the dataset. We notice that no entries were given for de variable "Datum". The variables `X_lambert`, `Y_lambert`, and `mutatie` show a similar degree of missingness. Several observations have missingness for multiple variables (@fig-missingnesspattern) On average 31.4% of the dataset is missing. There are several data points that should be double checked: 
+@fig-missingness shows the location of the missing data in the dataset. We notice that no entries were given for de variable "Datum". The variables `X_lambert`, `Y_lambert`, and `mutatie` show a similar degree of missingness. Several observations have missingness for multiple variables (@fig-missingnesspattern) On average 31.4% of the dataset is missing. There are several data points that should be double checked:
 
-- There are 40 rats where the location is present but there is no entry for mutation 
-- There are 17 rats who have a no location but have an entry for mutation. 
+-   There are 40 rats where the location is present but there is no entry for mutation
+-   There are 17 rats who have a no location but have an entry for mutation.
 
-It has to be checked if the data of these observations could be added to the dataset. Based on @fig-location_missingness we can see that the missingness in mutation is associated with a specific location. 
+It has to be checked if the data of these observations could be added to the dataset. Based on @fig-location_missingness we can see that the missingness in mutation is associated with a specific location.
 
-In comparison, only 0.4% of the data is missing in the 2013-2019 dataset (@fig-missingness_old). 
+In comparison, only 0.4% of the data is missing in the 2013-2019 dataset (@fig-missingness_old).
 
 ```{r, plot_missing}
 #| label: fig-missingness
 #| fig-cap: "Missingness in the dataset"
-vis_miss(data_staalname_2024)
+vis_miss(data_staalname_2024 %>% arrange(RN, Bekken, mutatie))
 ```
+
 ```{r, plot_missing_old}
 #| label: fig-missingness_old
 #| fig-cap: "Missingness in the dataset 2013-2019"
-vis_miss(data_staalname_old)
+vis_miss(data_staalname_old %>% arrange(RN, Bekken, mutatie))
 ```
 
 ```{r, plot_missing_pattern}
@@ -319,7 +308,6 @@ gg_miss_upset(data_staalname_2024, nsets = 10,
               nintersect = n_var_miss(data_staalname_2024))
 ```
 
-
 ```{r fig_miss_location}
 #| label: fig-location_missingness
 #| fig-cap: "Missingness of the coordinates for each level of muation"
@@ -327,8 +315,15 @@ gg_miss_upset(data_staalname_2024, nsets = 10,
 ggplot(data_staalname_2024,
        aes(x = X_lambert,
            y = Y_lambert)) +
- geom_miss_point() + 
+  geom_miss_point() + 
+  coord_equal() +
+  coord_fixed(ratio = 1) + 
  facet_wrap(~mutatie)
+
+range(data_staalname_old$X_lambert,
+      na.rm = TRUE)
+range(data_staalname_2024$Y_lambert,
+      na.rm = TRUE)
 ```
 
 ```{r combining_datasets, eval = !file.exists(find_root_file("data", "data_2013_2024.xls", criterion = has_file("ResistentieBrRat.Rproj")))}
@@ -336,14 +331,16 @@ ggplot(data_staalname_2024,
 ## export combined dataset without observations with missing locations. 
 ## all data locations with multiple rats are still in the data 
 
+data_staalname_2024$RN <- (max(data_staalname_old$RN) + 1) :
+  (max(data_staalname_old$RN)+nrow(data_staalname_2024))
+
 data_2013_2024 <- data_staalname_2024 %>% 
   select(!c(X_lambert_cent, Y_lambert_cent)) %>%  subset(!is.na(X_lambert) & 
                                                          !is.na(Y_lambert)) %>%
   rename(datum = Datum) %>% mutate(datum = as.POSIXct.Date(datum)) %>% 
-  merge(data_staalname_old %>% mutate(RN = as.character(RN)), 
-                                       by = c("RN", "datum", "Bekken", 
-                                              "Bekkennummer", "X_lambert", 
-                                              "Y_lambert", "mutatie", "jaar"),
+  merge(data_staalname_old, by = c("RN", "datum", "Bekken", 
+                                    "Bekkennummer", "X_lambert",
+                                    "Y_lambert", "mutatie", "jaar"),
         all = TRUE)
 
 
@@ -356,4 +353,3 @@ WriteXLS(data_2013_2024, path)
 
 
 ```
-

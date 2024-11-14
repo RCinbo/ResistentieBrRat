@@ -45,7 +45,7 @@ params:
 In 2002 werd het onderzoek rond resistentie tegen rodenticiden op basis van anticoagulantia
 of antistollingsmiddelen in Vlaanderen opgestart. Eerder gepubliceerde resultaten kunnen gevonden worden in, onder andere, @Baert2012, @Baert2012b en @Baert2016.
 
-In dit rapport bekijken we data van 2013 t.e.m. 2019 over heel Vlaanderen mbt resistentie van bruine rat tegen rattenvergif. Er zijn drie gekende mutaties die resistentie veroorzaken. Een dier kan 0, 1, of 2 gemuteerde allelen hebben. 
+In dit rapport bekijken we data van 2013 t.e.m. 2024 over heel Vlaanderen mbt resistentie van bruine rat tegen rattenvergif. Er zijn drie gekende mutaties die resistentie veroorzaken. Een dier kan 0, 1, of 2 gemuteerde allelen hebben. 
 
 
 
@@ -131,7 +131,7 @@ Hokken <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
 
 ```{r InlezenData, echo = FALSE, eval = !params$load_data}
 data <- read_excel(path = find_root_file("data", 
-                                         "2013 - 2019 BMK.xlsx",
+                                         "data_2013_2024.xls",
                                          criterion = 
                                            has_file("ResistentieBrRat.Rproj"))
                    ) %>%
@@ -148,13 +148,17 @@ data <- read_excel(path = find_root_file("data",
                                  "LE" = "Leie",
                                  "MA" = "Maas Antwerpen",
                                  "ML" = "Maas Limburg",
-                                 "NE" = "Nete"),
+                                 "NE" = "Nete", 
+                                 "BR" = "Brussel"),
          BekkenNaam = factor(BekkenNaam, levels = sort(levels(BekkenNaam))),
          Resistent = !(mutatie =='WW'),
          MutatieM1 = str_detect(mutatie,regex('M1')),
          MutatieM2 = str_detect(mutatie,regex('M2')),
          MutatieM3 = str_detect(mutatie,regex('M3')))
+
+
 data %>% st_as_sf(coords = c("X_lambert", "Y_lambert"), crs = "EPSG:31370") -> data
+
 data$hok <- sapply(X = 1:nrow(data), FUN = function(x)
   as.character(st_drop_geometry(
     Hokken[
@@ -162,6 +166,7 @@ data$hok <- sapply(X = 1:nrow(data), FUN = function(x)
       "Bkknnmm"])
     )
   )
+
 save(data, file = "data/Data.Rdata")
 data %>% 
   st_drop_geometry() %>%
