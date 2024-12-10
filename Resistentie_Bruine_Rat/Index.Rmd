@@ -1,29 +1,47 @@
 ---
 title: Resistentie bruine rat
-subtitle: Data-analyse 2013-2019
+subtitle: Data-analyse 2013-2024
 author: 
-  - firstname: Raïsa
-    name: Carmen
+  - name:
+      given: Raïsa
+      family: Carmen
     email: raisa.carmen@inbo.be
     orcid: 0000-0003-1025-8702
-  - firstname: Thierry
-    name: Onkelinx
+    affiliation: Research Institute for Nature and Forest (INBO)
+  - name:
+      given: Thierry
+      family: Onkelinx
     email: thierry.onkelinx@inbo.be
     orcid: 0000-0001-8804-4216
-shortauthor: Carmen, R., Onkelinx, T.
+    affiliation: Research Institute for Nature and Forest (INBO)
+  - name:
+      given: Robrecht
+      family: Dockx
+    email: robrecht.dockx@inbo.be
+    orcid: 0000-0002-3473-1931
+    affiliation: Research Institute for Nature and Forest (INBO)
+    corresponding: true
+shortauthor: Carmen, R., Onkelinx, T., Dockx, R.
 corresponding: raisa.carmen@inbo.be
 reviewer:
-  - firstname: Jane
-    name: Doe
-year: 2021
+  - name:
+      given: Jane
+      family: Doe
+    email: jane.doe@inbo.be
+    orcid: 
+    affiliation: Research Institute for Nature and Forest (INBO)
+year: 2024
 cover_photo: https://img1.vildaphoto.net/asset/l/17358.jpg
 cover_description: Bruine rat / Rattus norvegicus. Vilda Photo /	Yves Adams
 cover: cover.pdf
-doi: doi.org/11.11111/inbor.11111111
+doi: 10.11111/inbor.111111111
 reportnr: 11
 depotnr: D/1111/1111/111
 embargo: 2021-10-04
 style: INBO
+community: "inbo"
+funder: Research Institute for Nature and Forest (INBO)
+rightsholder: Research Institute for Nature and Forest (INBO)
 lang: nl
 lot: TRUE
 lof: TRUE
@@ -31,19 +49,20 @@ site: bookdown::bookdown_site
 link-citations: TRUE
 bibliography: "references.bib"
 output:
-  INBOmd::report: default
+  INBOmd::pdf_report: default
   INBOmd::gitbook: default
   bookdown::dont_run: default
   INBOmd::ebook: default
 params:
   load_data: TRUE
+keywords: "rodenticiden; resistentie; Vlaanderen"
 ---
 
 
 # Inleiding
 
 In 2002 werd het onderzoek rond resistentie tegen rodenticiden op basis van anticoagulantia
-of antistollingsmiddelen in Vlaanderen opgestart. Eerder gepubliceerde resultaten kunnen gevonden worden in, onder andere, @Baert2012, @Baert2012b en @Baert2016.
+of antistollingsmiddelen in Vlaanderen opgestart. Eerder gepubliceerde resultaten kunnen gevonden worden in, onder andere, @Baert2012, @Baert2012b, @Baert2016 en @Baert2021.
 
 In dit rapport bekijken we data van 2013 t.e.m. 2024 over heel Vlaanderen mbt resistentie van bruine rat tegen rattenvergif. Er zijn drie gekende mutaties die resistentie veroorzaken. Een dier kan 0, 1, of 2 gemuteerde allelen hebben. 
 
@@ -53,6 +72,8 @@ In dit rapport bekijken we data van 2013 t.e.m. 2024 over heel Vlaanderen mbt re
 library(assertthat)
 library(pROC)#for roc function in fit_model
 library(knitr)
+library(evaluate)
+require(scales)
 opts_chunk$set(
   echo = FALSE,
   eval = TRUE,
@@ -115,6 +136,8 @@ library(rprojroot)
 #library(inlatools)
 library(tidyverse)
 library(readxl)
+library(ggplot2)
+library(dplyr)
 
 devtools::install_version("tidyr", version = "1.1.3")  ## need this version for the complete function to work
 library(tidyr)
@@ -125,7 +148,44 @@ Hokken <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                     ,layer = "Hokken"
                 ) %>%
   st_transform("EPSG:31370")
+
+Hokken <- Hokken %>% mutate(Bekken_klr = substr(Bkknklr, start = 1, 
+                                                 stop = 2),
+                                 Bekken_nmm = substr(Bkknnmm, start = 1, 
+                                                 stop = 2),
+                                 Number_klr = substr(Bkknklr, start = 3, 
+                                                 stop = 4), 
+                                 Number_nmm = substr(Bkknnmm, start = 3, 
+                                                 stop = 4)) %>% 
+  rowwise() %>% 
+  mutate(Number_length_klr = nchar(Number_klr), 
+         Number_length_nmm = nchar(Number_nmm))
+
+Hokken <- Hokken %>% mutate(Bkknklr  = 
+                                        ifelse(Number_length_klr == 2, 
+                                      Bkknklr, paste0(Bekken_klr, 
+                                                      paste0("0", Number_klr))), 
+                                      Bkknnmm  = ifelse(Number_length_nmm == 2, 
+                                      Bkknnmm, paste0(Bekken_nmm, 
+                                                      paste0("0", Number_nmm)))
+                                      ) %>% 
+  select(c(1:6))
+
+
+
+
 ```
+
+```{r function}
+
+logit2prob <- function(logit){
+     odds <- exp(logit)
+     prob <- odds / (1 + odds)
+     return(prob)
+ }
+
+```
+
 
 # Data exploratie
 
@@ -137,6 +197,7 @@ data <- read_excel(path = find_root_file("data",
                    ) %>%
   mutate(Bekken = as.factor(Bekken),
          mutatie = as.factor(mutatie),
+         fact_jaar = factor(jaar, levels = 2013:2024),
          BekkenNaam = recode(Bekken,"BE" = "Beneden Schelde",
                                  "BO" = "Boven Schelde",
                                  "BP" = "Brugse polders",
@@ -151,11 +212,13 @@ data <- read_excel(path = find_root_file("data",
                                  "NE" = "Nete", 
                                  "BR" = "Brussel"),
          BekkenNaam = factor(BekkenNaam, levels = sort(levels(BekkenNaam))),
-         Resistent = !(mutatie =='WW'),
+         Resistent = !(mutatie == 'WW'),
          MutatieM1 = str_detect(mutatie,regex('M1')),
          MutatieM2 = str_detect(mutatie,regex('M2')),
          MutatieM3 = str_detect(mutatie,regex('M3')))
 
+
+data <- data %>% filter(BekkenNaam != "Brussel")
 
 data %>% st_as_sf(coords = c("X_lambert", "Y_lambert"), crs = "EPSG:31370") -> data
 
@@ -167,7 +230,7 @@ data$hok <- sapply(X = 1:nrow(data), FUN = function(x)
     )
   )
 
-save(data, file = "data/Data.Rdata")
+save(data, file = "../data/Data.Rdata")
 data %>% 
   st_drop_geometry() %>%
   group_by(jaar) %>%
@@ -193,38 +256,47 @@ AantalSamples <- 10
 MeshMaxEdge <- 10e3
 ```
 
-Een overzicht van alle datapunten kan gevonden worden op [https://rattenbestrijding.inbo.be/](https://rattenbestrijding.inbo.be/). Figuur \@ref(fig:SamenvattingData) toont een samenvatting van de hoeveelheid data die we hebben over de verschillende bekkens en over alle jaren. Het doel was om ieder jaar in ieder van de bekkens 100 ratten te vangen en te testen op genetische mutaties. De bekken werden daarom in 100 hokken verdeeld zodat de steekproef geografisch gebalanceerd gespreid was. In 2017 en 2018 werden alleen de minder resistente hokken bemonsterd, in 2019 werden terug alle bekkens bemonsterd. In totaal werden er zo ieder jaar minstens `r min(datajaar$N)` (in `r datajaar[datajaar$N==min(datajaar$N),'jaar']`) en maximum `r max(datajaar$N)` (in `r datajaar[datajaar$N==max(datajaar$N),'jaar']`) ratten gevangen en getest op resistentie. 
+Een overzicht van alle datapunten kan gevonden worden op [https://rattenbestrijding.inbo.be/](https://rattenbestrijding.inbo.be/). Figuur \@ref(fig:SamenvattingData) toont een samenvatting van de hoeveelheid data die we hebben over de verschillende bekkens en over alle jaren. Het doel was om ieder jaar in ieder van de bekkens 100 ratten te vangen en te testen op genetische mutaties. De bekken werden daarom in 100 hokken verdeeld zodat de steekproef geografisch gebalanceerd gespreid was. In 2017 en 2018 werden alleen de minder resistente hokken bemonsterd. In de periode van 2019 tem 2023 werd geen enkel hok bemonsterd. Pas in 2024 werden de verschillende hokken opnieuw bemonsterd. In totaal werden er zo ieder jaar minstens `r min(datajaar$N)` (in `r datajaar[datajaar$N==min(datajaar$N),'jaar']`) en maximum `r max(datajaar$N)` (in `r datajaar[datajaar$N==max(datajaar$N),'jaar']`) ratten gevangen en getest op resistentie. 
 
 ```{r SamenvattingData, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap = "Aantal gevangen ratten per jaar, per bekken."}
-data %>% group_by(BekkenNaam, jaar) %>%
-  summarise(N = n()) %>% 
-  tidyr::complete(BekkenNaam, jaar) %>%
+data %>% group_by(BekkenNaam, jaar, fact_jaar) %>% 
+  mutate(BekkenNaam = as.character(BekkenNaam)) %>% 
+  summarise(N = n()) %>%
   ungroup() %>%
+  tidyr::complete(BekkenNaam, fact_jaar) %>%
   mutate(N = ifelse(is.na(N),0,N)) %>% ## Dit geeft de impressie dat als er geen observaties waren dat ze eigenlijk geen resistentie hebben gevonden 
-  ggplot + geom_line(aes(color = BekkenNaam, x = jaar, y = N), size = 1) + 
-  scale_x_continuous(breaks = 2013:2019) +  scale_y_continuous(breaks = seq(0,120,20), limits = c(0,120)) + 
+  ggplot + geom_line(aes(color = BekkenNaam, x = as.numeric(fact_jaar), y = N), size = 1) + 
+  scale_x_continuous(breaks = seq(1, 12, 1), labels = as.character(c(2013:2024))) + 
+  scale_y_continuous(breaks = seq(0,120,20), limits = c(0,120)) + 
   theme_bw() + scale_color_brewer(name = "", palette = "Paired") +
-  ylab('Aantal ratten')
+  ylab('Aantal ratten') +
+  xlab("Jaar")
 ```
 ## Spreiding observaties in tijd
 
-Enkele ratten werden toegewezen aan een ander jaar dan het jaar waarin ze gevangen werden. Dit gebeurde vooral met ratten die op het einde van het voorgaande jaar werden gevangen (Figuur \@ref(fig:DatumvsJaar)). Figuur \@ref(fig:Vangstjaar) vergelijkt het jaar waarin de ratten gevangen werden ten opzichte van het jaar waaraan ze werden toegewezen. Figuur \@ref(fig:VangstjaarBekken) geeft hetzelfde overzicht per bekken. Er waren `r sum(is.na(data$datum))` ratten waar de datum van vangst niet gekend was ("Onbekend" in Figuur \@ref(fig:Vangstjaar)).
+Enkele ratten werden toegewezen aan een ander jaar dan het jaar waarin ze gevangen werden. Dit gebeurde vooral met ratten die op het einde van het voorgaande jaar werden gevangen (Figuur \@ref(fig:DatumvsJaar)). Figuur \@ref(fig:Vangstjaar) vergelijkt het jaar waarin de ratten gevangen werden ten opzichte van het jaar waaraan ze werden toegewezen. Figuur \@ref(fig:VangstjaarBekken) geeft hetzelfde overzicht per bekken. Op Figuur \@ref(fig:VangstjaarBekken) valt het op dat voor het bekken Maas Antwerpen er aanzienlijk minder ratten werden gevangen dan de voorgaande jaren. Er waren `r sum(is.na(data$datum))` ratten waar de datum van vangst niet gekend was ("Onbekend" in Figuur \@ref(fig:Vangstjaar)). Het hoge aantal ontbrekende datums is te wijten aan het jaar 2024. Gedurende dit jaar werden er  `r sum(!is.na(data %>% subset(jaar == 2024) %>% select(datum) %>% st_drop_geometry(data_all)))` datums opgegeven. Daarom kunnen ook de ratten die gevangen werden in 2023 ook niet geïdentificeerd worden  (Figuur \@ref(fig:Vangstjaar)). Alle ratten die gevangen werden in 2023 en 2024 werden toegewezen aan 2024. Voor verdere analyse werd de vangstdatum van de ratten voor het jaar 2024 arbitrair vastgelegd op 01/01/2024. 
+
+
+
 
 ```{r Vangstjaar, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap = "Vergelijking van het jaar waarin de rat gevangen werd t.o.v. het jaar waaraan de staal werd toegewezen"}
 data %>% 
-  mutate(jaardatum = year(datum)) %>%
+  mutate(jaardatum = as.character(year(datum))) %>%
   group_by(jaar, jaardatum) %>%
   summarise(N = n()) %>% 
   mutate(jaardatum = ifelse(is.na(jaardatum),"Onbekend",jaardatum)) %>%
   ungroup() %>%
   ggplot() +
   geom_col(aes(fill = jaardatum, x = jaar, y = N)) +
-  scale_x_continuous(breaks = 2013:2019) +  
+  scale_x_continuous(breaks = 2013:2024) +  
   theme_bw() + scale_fill_brewer(name = "Jaar vangst", palette = "Paired") +
   ylab('Aantal ratten') + xlab("Toegewezen jaar")
 ```
 
+
+
 ```{r VangstjaarBekken, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap = "Vergelijking van het jaar waarin de rat gevangen werd t.o.v. het jaar waaraan de staal werd toegewezen. Voor ieder van de bekken wordt het aantal observaties zonder geldige datum (Onbekend) en het aantal observaties waar het toegewezen jaar niet gelijk is aan het vangstjaar (shift jaar) vermeld."}
+
 lbls <- data %>% st_drop_geometry() %>%
   mutate(jaardatum = as.factor(year(datum))) %>% 
   mutate(jaardatum = ifelse(is.na(jaardatum),"Onbekend",jaardatum)) %>%
@@ -233,10 +305,13 @@ lbls <- data %>% st_drop_geometry() %>%
             shiftjaar = sum(jaardatum != "Onbekend" & jaar != jaardatum)) %>% 
   mutate(label = sprintf("%s, Onbekend = %d, shift jaar = %d", 
             BekkenNaam, missingdatum, shiftjaar))
+
 lbl <- lbls$label
+
 names(lbl) <- lbls$BekkenNaam
+
 data %>% 
-  mutate(jaardatum = as.factor(year(datum)),
+  mutate(jaardatum = as.character(year(datum)),
          jaardatum = ifelse(is.na(jaardatum),"Onbekend",jaardatum)) %>%
   group_by(jaar, jaardatum, BekkenNaam) %>%
   summarise(N = n(),
@@ -247,12 +322,21 @@ data %>%
   geom_col(aes(fill = jaardatum, x = jaar, y = N)) +
   facet_wrap(facets = vars(BekkenNaam), ncol = 3, 
              labeller = labeller(BekkenNaam = lbl)) +
-  scale_x_continuous(breaks = 2013:2019) +  
-  theme_bw() + scale_fill_brewer(name = "Jaar vangst", palette = "Paired") +
+  scale_x_continuous(breaks = 2013:2024) +  
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(name = "Jaar vangst", palette = "Paired") +
   ylab('Aantal ratten') + xlab("Toegewezen jaar")
+```
+```{r}
+data <- data %>% mutate(datum = ifelse(jaar == 2024, 
+                        "2024-01-01", datum))
 ```
 
 ```{r DatumvsJaar, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap = "Overzicht van de vangstdatum van ratten die gevangen werden in een ander jaar dat het jaar waar ze aan werden toegewezen."}
+
+## 2024 wortdt niet getoond omdat datum van 2024 ontbreekt voor elke observatie
+
 data %>%
   mutate(jaardatum = as.factor(year(datum)),
          datum = as.Date(datum)) %>%
@@ -262,7 +346,7 @@ data %>%
   scale_x_date(breaks = "1 year", minor_breaks = "1 month") +
   theme_bw() + scale_color_discrete(name = "Jaar toewijzing") +
   ylab('Toegewezen jaar') + xlab("Datum vangst") + 
-  scale_y_continuous(breaks = seq(2013,2019))
+  scale_y_continuous(breaks = seq(2013,2024))
 ```
 
 ## Spreiding in ruimte
@@ -287,27 +371,34 @@ ggplot() +
 
 
 ```{r SpreadingRuimte2, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap = "Geografische weergave gesamplede hokken. Het werkelijke jaar van de vangst werd gebruikt. Indien een hok gesampled werd, werd er nagegaan of the rat zich effectief in het hok waaraan het werd toegewezen bevindt (overlap). "}
+
 A <- expand.grid(Bekkennummer = unique(Hokken$Bkknklr), 
-                 year = 2013:2019) 
+                 year = c(2013:2019,2024))
+
 jaar <- ifelse(is.na(as.numeric(year(data$datum))),
                data$jaar,
                as.numeric(year(data$datum)))
+
 A$Sampled <- sapply(1:nrow(A), FUN = function(x){
   return(length(which(jaar == A[x,'year'] & 
                  data$Bekkennummer == A[x,"Bekkennummer"])) > 0)
 })
+
 A$Sampleoverlap <- sapply(1:nrow(A), FUN = function(x){
   return(length(which(jaar == A[x,'year'] & 
                  data$Bekkennummer == A[x,"Bekkennummer"] &
                    data$hok == A[x,"Bekkennummer"])) > 0)
 })
+
 Hokken %>%
   full_join(A, by = c("Bkknnmm" = "Bekkennummer")) -> B
+
 B$color <- ifelse(is.na(B$Sampled) | !B$Sampled,
                         "No",
                         ifelse(B$Sampleoverlap,
                                "Yes, overlap",
                                "Yes, no overlap")) 
+
 B %>% dplyr::filter(!is.na(year)) %>% mutate(color= as.factor(color)) %>%
   ggplot() + geom_sf(aes(fill = color, color = color)) + 
   facet_wrap(vars(year), ncol = 2) +
@@ -317,11 +408,16 @@ B %>% dplyr::filter(!is.na(year)) %>% mutate(color= as.factor(color)) %>%
 ```
 
 ```{r SpreadingRuimte3, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap = "Indien Locatie match=FALSE, werd de rat toegewezen aan een ander hok dan waar het werd gevangen."}
+## grafiek klopt niet want bekkennummer bv BO01 == BO1. 
+data <- data %>% mutate(Bekkennummer_num = paste0(Bekken, 
+                                                 substr(Bekkennummer, 
+                                                        start = 3, 
+                                                        stop = 4)))
 ggplot() + 
   geom_sf(data = Hokken, aes(fill = BekknNm), alpha = 0.2) + 
   geom_sf(data = data, aes(color = ifelse(is.na(Bekkennummer == hok),
                                     FALSE,
-                                    Bekkennummer == hok))
+                                    Bekkennummer_num == hok))
           ) + 
   scale_fill_brewer(name = "Bekken", palette = "Paired") +
   scale_color_brewer(name = "Locatie match") +
@@ -334,12 +430,12 @@ Figuur \@ref(fig:Samenvattingresistentie) toont, voor ieder van de bekken en voo
 
 ```{r Samenvattingresistentie, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap="Resistentie per bekken, per jaar."}
 data %>% group_by(BekkenNaam, jaar) %>%  ## jaar is hier toegewezen jaar en niet gevangen jaar
-  summarise(Resistent = mean(Resistent),
-            M1 = mean(MutatieM1),
-            M2 = mean(MutatieM2),
-            M3 = mean(MutatieM3)) -> 
+  summarise(Resistent = mean(Resistent, na.rm = TRUE),
+            M1 = mean(MutatieM1, na.rm = TRUE),
+            M2 = mean(MutatieM2, na.rm = TRUE),
+            M3 = mean(MutatieM3, na.rm = TRUE)) -> 
   dataResistentie
-  ggplot(dataResistentie) + geom_point(aes(color = as.factor(jaar), 
+  ggplot(dataResistentie) + geom_jitter(aes(color = as.factor(jaar), 
                                            x = BekkenNaam, 
                                            y = Resistent)) + 
   scale_y_continuous(breaks = seq(0,1,0.20), limits = c(0,1)) + 
@@ -355,9 +451,10 @@ dataResistentie %>%
   pivot_longer(cols = c('M1', 'M2', 'M3'), 
                names_to = "mutatie",
                values_to = "proportie") %>%
-  ggplot() + geom_point(aes(color = as.factor(jaar), 
-                                           x = BekkenNaam, 
-                                           y = proportie)) + 
+  ggplot() + geom_jitter(aes(color = as.factor(jaar), 
+                                           y = proportie, 
+                                           x = BekkenNaam), 
+                         width = 0.5) + 
   facet_grid(cols = vars(mutatie), labeller = labeller(mutatie = mutatielabel)) +
   scale_y_continuous(breaks = seq(0,1,0.20), limits = c(0,1)) + 
   scale_color_discrete(name = '') +
@@ -380,65 +477,80 @@ ggplot() + geom_sf(data = Hokken, aes(fill = BekknNm), alpha = 0.2) +
   theme_bw() 
 ```
 
-Figuur \@ref(fig:resistentieTijd) de trend in de proportie resistentie (over alle mutaties) en voor ieder van de mutaties apart. Figuur \@ref(fig:resistentieTijd2) toont dezelfde informatie per bekken. Deze grafieken zijn uiteraard vertekend in 2017 en 2018 wanneer er enkel in de gebieden met lage resistentie onderzoek werd gedaan.
+Figuur \@ref(fig:resistentieTijd) toont de trend in de proportie resistentie (over alle mutaties) en voor ieder van de mutaties apart. Figuur \@ref(fig:resistentieTijd2) toont dezelfde informatie per bekken. Deze grafieken zijn uiteraard vertekend in 2017 en 2018 wanneer er enkel in de gebieden met lage resistentie onderzoek werd gedaan. De trend in de periode 2019-2023 is een lineaire extrapolatie obv de beschikbare datapunten en niet de werkelijke trend. De werkelijke trend in deze periodekan verschillen ten opzichte van de trend weergegeven in Figuur \@ref(fig:resistentieTijd) en Figuur \@ref(fig:resistentieTijd2). Er kan wel opgemerkt worden dat de globale trend (Figuur \@ref(fig:resistentieTijd)) in de periode 2019-2023 een verderzetting is van de trend in de periode 2013-2019.
 
 ```{r resistentieTijd, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap="Resistentie per bekken, per jaar."}
 data %>% group_by(jaar) %>% st_drop_geometry() %>%
-  summarize(Resistentie = mean(Resistent),
-         M1 = mean(MutatieM1),
-         M2 = mean(MutatieM2),
-         M3 = mean(MutatieM3)) %>%    ### Gaat rare zaken geven door NA gelijk te stellen aan 0. Na is Na en niet 0. missing data niet gelijk zetten aan 0. Gaat ook rare zaken geven in het model
+  summarize(Resistentie = mean(Resistent, na.rm = TRUE),
+         M1 = mean(MutatieM1, na.rm = TRUE),
+         M2 = mean(MutatieM2, na.rm = TRUE),
+         M3 = mean(MutatieM3, na.rm = TRUE)) %>%    
   pivot_longer(cols = -1, names_to = "Type", values_to = "Proportie") %>%
   ggplot() + geom_line(aes(color = Type, x = jaar, y = Proportie)) +
+  geom_point(aes(color = Type, x = jaar, y = Proportie)) +
   theme_bw() +
-  scale_x_continuous(breaks = 2013:2019)
+  scale_x_continuous(breaks = 2013:2024)
 ```
+
 ```{r resistentieTijd2, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 12, fig.width=10, fig.cap="Resistentie per bekken, per jaar."}
 data %>% group_by(jaar,  BekkenNaam) %>% st_drop_geometry() %>%
-  summarize(Resistentie = mean(Resistent),
-         M1 = mean(MutatieM1),
-         M2 = mean(MutatieM2),
-         M3 = mean(MutatieM3)) %>%
+  summarize(Resistentie = mean(Resistent, na.rm = TRUE),
+         M1 = mean(MutatieM1, na.rm = TRUE),
+         M2 = mean(MutatieM2, na.rm = TRUE),
+         M3 = mean(MutatieM3, na.rm = TRUE)) %>%
   pivot_longer(cols = -c(1,2), names_to = "Type", values_to = "Proportie") %>%
   ggplot() + geom_line(aes(color = Type, x = jaar, y = Proportie)) +
-  theme_bw() +
-  scale_x_continuous(breaks = 2013:2019) +
-  facet_wrap(vars(BekkenNaam), nrow = 4)
+  geom_point(aes(color = Type, x = jaar, y = Proportie)) +
+  scale_x_continuous(breaks = 2013:2024) +
+  facet_wrap(vars(BekkenNaam), nrow = 5) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
 ```
 
 # Dataverwerking
+
 ```{r load-models}
 find_root_file("output",criterion = 
                            has_file("ResistentieBrRat.Rproj")) %>%
     list.files(full.names = TRUE, recursive = TRUE) %>%
   map(readRDS) -> base_models
+
 dependent_var <- map_chr(base_models, "dependent")
+
 waic <- map_dbl(base_models, "waic")
+
 map_lgl(base_models, "first_order") %>%
   ifelse(1, 2) -> rw_order
+
 model_type <- map_chr(base_models, "type")
+
 map(base_models, "hyperpar") %>%
   map(rownames_to_column, var = "parameter") %>%
   map2(dependent_var, ~mutate(.x, dependent_var = .y)) %>% ###not sure what's happenng here; replaced species with dependent_var
   map2(rw_order, ~mutate(.x, rw_order = .y)) %>%
   map2(model_type, ~mutate(.x, model = .y)) %>%
   bind_rows() -> hyperpar
+
 map(base_models, "fixed") %>%
   map(rownames_to_column, var = "parameter") %>%
   map2(dependent_var, ~mutate(.x, dependent_var = .y)) %>%
   map2(rw_order, ~mutate(.x, rw_order = .y)) %>%
   map2(model_type, ~mutate(.x, model = .y)) %>%
   bind_rows() -> fixed
+
 map(base_models, "trend") %>%
   map2(dependent_var, ~mutate(.x, dependent_var = .y)) %>%
   map2(rw_order, ~mutate(.x, rw_order = .y)) %>%
   map2(model_type, ~mutate(.x, model = .y)) %>%
   bind_rows() -> trend
+
 # trend %>% #No different types of models (cumulative/proportion) were run
 #   mutate(
 #     type = replace_na(type, ""),
 #     prediction = interaction(model, type, sep = " ")
 #   ) -> trend
+
 map(base_models, "roc") %>%
   map("ci") %>%
   map(
@@ -448,17 +560,54 @@ map(base_models, "roc") %>%
   map2(rw_order, ~mutate(.x, rw_order = .y)) %>%
   map2(model_type, ~mutate(.x, model = .y)) %>%
   bind_rows() -> auc
+
 map(base_models, "predictions") %>%
   map2(dependent_var, ~mutate(.x, dependent_var = .y)) %>%
   map2(rw_order, ~mutate(.x, rw_order = .y)) %>%
   map2(model_type, ~mutate(.x, model = .y)) %>%
   bind_rows() -> predictions
+
 ```
+In dit hoofdstuk testen we een bayesiaans model met spatiale en temporale correlaties. De afhankelijke variabele, resistentie $Y_r$, is 1 indien er minstens één mutatie aanwezig is en anders 0. Voor de temporale component gebruiken we het feitelijke jaar waarin de rat werd gevangen en niet het jaar waaraan de rat werd toegewezen. Het jaar 2024 is het toegewezen jaar van de ratten die in 2023 en 2024 gevangen zijn.  Dit omdat voor deze gevangen ratten geen datum van vangst werd geregistreerd. Daarnaast gebruiken we ook de feitelijke x-y coördinaten in plaats van het hok waar de rat werd aan toegewezen. Deze x-y coordinaten kunnen afwijken van de echte vanglocatie; indien de echte vanglocatie niet gekend was, werd het centrum van het hok ingevuld.
+
+$$R_{st}=B(\pi_{st})$$
+
+$$E(R_{st})=\pi_{st}$$
+
+$$logit(\pi_{st}) = \beta_0+ \beta_t + \omega_{st}$$
+$$u_{st} \sim GMRF(0, \Omega)$$
+
+$Y_{st}$ is de afhankelijke variabele op locatie *s* op tijdstip *t*. We zullen vier verschillende modellen fitten:
+
+- $Y_{1st}$: Aanwezigheid van mutatie 1 op locatie (s) op tijdstip *t*
+  - $Y_{1st}$ = 1: indien de rat op tijdstip *t*, op locatie *s* mutatie 1 heeft.
+  - $Y_{1st}$ = 0: indien de rat op tijdstip *t*, op locatie *s* mutatie 1 niet heeft.
+  
+- $Y_{2st}$: Aanwezigheid van mutatie 2 op locatie *s* op tijdstip *t*
+  - $Y_{2st}$ = 1: indien de rat op tijdstip *t*, op locatie *s* mutatie 2 heeft.
+  - $Y_{2st}$ = 0: indien de rat op tijdstip *t*, op locatie *s* mutatie 2 niet heeft.
+  
+- $Y_{3st}$: Aanwezigheid van mutatie 3 op locatie *s* op tijdstip *t*
+  - $Y_{3st}$ = 1: indien de rat op tijdstip *t*, op locatie *s* mutatie 3 heeft.
+  - $Y_{3st}$ = 0: indien de rat op tijdstip *t*, op locatie *s* mutatie 3 niet heeft.
+
+- $Y_{1st}$: Resistentie op locatie *s* op tijdstip *t*
+  - $Y_{1st}$ = 1: indien de rat op tijdstip *t*, op locatie *s* resistent is (d.w.z. dat ze minstens één van de mutaties heeft).
+  - $Y_{1st}$ = 0: indien de rat op tijdstip *t*, op locatie *s* niet resistent is (d.w.z. dat ze geen van de drie mutaties heeft).
+
+$b_t$ is een random walk van de eerste orde in de tijd *t*. $\omega_{ts}$ is een GMRF (Gaussian Markov Random Field) met tijdscorrelatie.
 
 We fitten vier verschillende Bayesiaanse, spatiale en temporale modellen, steeds met een andere afhankelijke variabele. Bij het eerste model bekijken de resistentie in het algemeen; onze afhankelijke variabele is 1 indien ze minstens één van de mutaties aanwezig is. De andere drie modellen bekijken ieder van de mutaties apart.
 
 Voor ieder van de modellen gebruiken we verder dezelfde dataset en dezelfde mesh met een max edge (grootst toegestane edge lengte) van `r print(MeshMaxEdge)` tot `r sprintf("%d",3*MeshMaxEdge)` en een cutoff (minimum toegestane afstand tussen punten) van `r MeshMaxEdge/5` (Figuur \@ref(fig:INLAmeshShape)).
-```{r INLAmeshShape, echo = FALSE, warning = FALSE}
+
+De Area Under the Curve (AUC) (Figuur \@ref(fig:auc)) is de oppervlakte onder de ROC (Receiver Operating Characteristic) curve. Het is een maatstaf voor hoe goed het model voorspellingen kan doen. Een model met een AUC van 1 voorspelt alles 100% correct. Een model met een AUC van 0 voorspelt alles 100% fout.
+
+WAIC is een “goodness of fit’ maatstaf. Bij deze 4 modellen heeft de vergelijking tussen de modellen niet
+veel zin aangezien WAIC enkel vergeleken mag worden tussen modellen die gefit zijn om dezelfde data. In
+deze 4 modellen is de afhankelijke variabele steeds verschillend dus we WAIC mag niet vergeleken worden.
+
+```{r}
 Kaart <- read_sf(dsn = find_root_file("data", "Kaartjes", criterion = 
                                            has_file("ResistentieBrRat.Rproj")),
                  layer = "Vlaanderen")
@@ -466,8 +615,15 @@ Kaart <- read_sf(dsn = find_root_file("data", "Kaartjes", criterion =
 mesh <- inla.mesh.2d(boundary = Kaart, 
                      max.edge = c(MeshMaxEdge, 3*MeshMaxEdge), 
                      cutoff = MeshMaxEdge/5)
+```
+
+\newpage
+
+```{r INLAmeshShape, fig.cap = "Mesh vlaanderen", echo = FALSE, warning = FALSE}
+
 ggplot() + gg(mesh) + coord_fixed() +  
   ggtitle(paste("Vertices: ", mesh$n)) + theme_void()
+
 ```
 
 ```{r auc, fig.cap = "Area under the curve. Higher is better."}
@@ -508,25 +664,30 @@ data.frame(dependent_var, waic) %>%
   scale_color_discrete(name = "Model")
 ```
 
+\newpage
+
 ## Fixed effects
+
+De intercept kan geinterpreteerd worden als de kans op resistentie/mutatie in het referentiejaar (2013).
+
 ```{r intercept, fig.cap = "Intercept of the models"}
 fixed %>%
-  filter(parameter == "intercept") %>%
+  subset(parameter == "intercept") %>%
   mutate(
     dependent_var = reorder(dependent_var, mean),
-    median = `0.5quant`,
-    lcl = `0.025quant`,
-    ucl = `0.975quant`
+    median = logit2prob(`0.5quant`),
+    lcl = logit2prob(`0.025quant`),
+    ucl = logit2prob(`0.975quant`)
   ) %>%
   ggplot(aes(x = median, xmin = lcl, xmax = ucl, y = dependent_var)) +
-  geom_errorbarh(position = position_dodge(0.5)) +
-  geom_point(position = position_dodge(0.5)) +
-  theme(axis.title = element_blank())
+geom_errorbarh(position = position_dodge(0.5)) +
+geom_point(position = position_dodge(0.5)) +
+theme(axis.title = element_blank())
 ```
 
-```{r trends, fig.cap = "Parameters for the linear trend components."}
+```{r trends, fig.cap = "Parameters for the linear trend components.", eval = FALSE}
 fixed %>%
-  filter(parameter != "intercept") %>%
+  subset(parameter != "intercept") %>%
   mutate(
     dependent_var = reorder(dependent_var, mean),
     median = `0.5quant`,
@@ -544,22 +705,20 @@ fixed %>%
   geom_vline(xintercept = 0, linetype = 2) +
   theme(axis.title = element_blank())
 ```
+\newpage
 
 ## General trends
 
-- **median**: prediction using the median predicted resistance (overall / M1 / M2 / M3) for that year
-- **without**: prediction assuming the predicted resistance (overall / M1 / M2 / M3) is 0%
-
-
 ```{r trends-Resistent}
-require(scales)
+
 plot_trend <- function(this_depvar) {
   trend %>%
-    filter(dependent_var  == this_depvar) %>%
+    subset(dependent_var  == this_depvar) %>%
     ggplot(aes(x = year, y = mean, ymin = lcl, ymax = ucl)) +
-    geom_ribbon( alpha = 0.3, linetype = 3) +
+    geom_ribbon(alpha = 0.3, linetype = 3) +
     geom_line() +
     scale_y_continuous(labels = percent) +
+    scale_x_continuous(year, breaks = c(2013:2024)) + 
     theme(axis.title = element_blank()) +
     ggtitle(this_depvar) 
 }
@@ -581,7 +740,7 @@ plot_trend("MutatieM3")
 
 ```{r sec-range}
 hyperpar %>%
-  filter(parameter == "Range for site") %>%
+  subset(parameter == "Range for site") %>%
   mutate(
     dependent_var = reorder(dependent_var, mean),
     order = factor(rw_order)
@@ -600,7 +759,7 @@ hyperpar %>%
 
 ```{r sec-stdev}
 hyperpar %>%
-  filter(parameter == "Stdev for site") %>%
+  subset(parameter == "Stdev for site") %>%
   mutate(
     dependent_var = reorder(dependent_var, mean),
     order = factor(rw_order)
@@ -619,7 +778,7 @@ hyperpar %>%
 
 ```{r sec-rho}
 hyperpar %>%
-  filter(parameter == "GroupRho for site", !is.na(mean)) %>%
+  subset(parameter == "GroupRho for site", !is.na(mean)) %>%
   mutate(
     dependent_var = reorder(dependent_var, mean),
     order = factor(rw_order)
@@ -635,23 +794,21 @@ hyperpar %>%
   theme(axis.title = element_blank())
 ```
 
-## Random walk hyper parameters
-
-Not in the current models?
 
 ## Model predictions
 
-```{r pred-Resistent, fig.height = 12, fig.width=10}
+```{r pred-Resistent, fig.height = 12, fig.width=10, warning=FALSE}
 Hokken %>%
   right_join(predictions[predictions$dependent_var == "Resistent",],
              by = c('Bkknklr' = 'location')) %>%
-  ggplot() + geom_sf(aes(fill = mean, color= mean)) +
+  ggplot() + geom_sf(aes(fill = mean, color = mean)) +
   facet_wrap(vars(year), nrow = 3) +
+  scale_fill_continuous(na.value = "grey")+
   ggtitle('Resistentie')
 ```
 
 
-```{r pred-M1, fig.height = 12, fig.width=10}
+```{r pred-M1, fig.height = 12, fig.width=10, warning=FALSE}
 Hokken %>%
   right_join(predictions[predictions$dependent_var == "MutatieM1",],
              by = c('Bkknklr' = 'location')) %>%
@@ -659,7 +816,8 @@ Hokken %>%
   facet_wrap(vars(year), nrow = 3) +
   ggtitle('MutatieM1')
 ```
-```{r pred-M2, fig.height = 12, fig.width=10}
+
+```{r pred-M2, fig.height = 12, fig.width=10, warning=FALSE}
 Hokken %>%
   right_join(predictions[predictions$dependent_var == "MutatieM2",],
              by = c('Bkknklr' = 'location')) %>%
@@ -667,27 +825,18 @@ Hokken %>%
   facet_wrap(vars(year), nrow = 3) +
   ggtitle('MutatieM2')
 ```
-```{r pred-M3, fig.height = 12, fig.width=10}
+
+```{r pred-M3, fig.height = 12, fig.width=10, warning=FALSE}
 Hokken %>%
   right_join(predictions[predictions$dependent_var == "MutatieM3",],
              by = c('Bkknklr' = 'location')) %>%
-  ggplot() + geom_sf(aes(fill = mean, color= mean)) +
+  ggplot() + geom_sf(aes(fill = mean, color = mean)) +
   facet_wrap(vars(year), nrow = 3) +
   ggtitle('MutatieM3')
 ```
 
-## Rattenresistentie in Vlaanderen
-In dit hoofdstuk testen we een bayesiaans model met spatiale en temporale correlaties. De afhankelijke variabele, resistentie $Y_r$, is 1 indien er minstens één mutatie aanwezig is en anders 0. Voor de temporale component gebruiken we het feitelijke jaar waarin de rat werd gevangen en niet het jaar waaraan de rat werd toegewezen. Daarnaast gebruiken we ook de feitelijke x-y coördinaten in plaats van het hok waar de rat werd aan toegewezen. Deze x-y coordinaten kunnen afwijken van de echte vanglocatie; indien de echte vanglocatie niet gekend was, werd het centrum van het hok ingevuld.
 
-$$R_{st}=B(\pi_{st})$$
-$$E(R_{st})=\pi_{st}$$
-$$logit(\pi_{st}) = \beta_1+u_{st}+$$
-$$u_{st} \sim GMRF(0, \Omega)$$
-$R_{st}$ is de resistentie op locatie $s$ op tijdstip $t$. $u$ is het spatiaal
-gecorreleerde random effect, en wordt benaderd door een Gaussian Markov random 
-field (GMRF) met gemiddelde 0 en correlatie matrix $\Omega$.
-
-```{r Resistentiemodel, echo = FALSE, warning = FALSE, cache = TRUE}
+```{r Resistentiemodel, echo = FALSE, warning = FALSE, cache = TRUE, include = FALSE}
 #########-----------INLA model; no spatial or time correlation----------########
 data$y <- as.numeric(data$Resistent)
 f1 <- y ~ 1  + Bekken
@@ -736,12 +885,29 @@ modS <- inla(f2,
 
 #############-----------Spatial and time correlations-------------##############
 ## define SPDE 
-Projectionmatrix <- inla.spde.make.A(mesh,
-                                     group = (data$jaar - min(data$jaar) + 1),
-                                     loc = st_coordinates(data),
-                                     Ngroup = length(unique(
-                                       data$jaar - min(data$jaar) + 1))
-                                     )
+
+### Projectiomatrix pakt van 2013-2024 met 2020-2023 als 0
+### w.index doet dat niet? Code below holds some changes 
+
+# Projectionmatrix <- inla.spde.make.A(mesh,
+#                                      group = (data$jaar - min(data$jaar) + 1),
+#                                      loc = st_coordinates(data),
+#                                      Ngroup = length(unique(
+#                                        data$jaar - min(data$jaar) + 1))
+#                                      )
+
+unique_years <- sort(unique(data$jaar))
+
+data$jaar_group <- as.numeric(factor(data$jaar, levels = unique_years))
+
+Projectionmatrix <- inla.spde.make.A(
+    mesh = mesh,
+    group = data$jaar_group,        # Gebruik de aangepaste groepen
+    loc = st_coordinates(data),
+    Ngroup = length(unique_years)  # Aantal unieke tijdsgroepen
+)
+
+
 ## defining the spatial random fields
 w.index <- inla.spde.make.index( name = "w",
                                  n.spde = mesh$n, #of spdeC$n.spde?
@@ -789,8 +955,8 @@ Combined <- rbind(mod$summary.fixed[, c("mean", "0.025quant", "0.975quant")],
                   modS$summary.fixed[, c("mean", "0.025quant", "0.975quant")],
                   modTS$summary.fixed[, c("mean", "0.025quant", "0.975quant")]
 )
-Combined$WhichModel <- c(rep("GLM",12), 
-                         rep(c("Spatial", "Spatial-temporal"), each = 13))
+Combined$WhichModel <- c(rep("GLM",13), 
+                         rep(c("Spatial", "Spatial-temporal"), each = 14))
 Combined$WhichVariable <- c(rownames(mod$summary.fixed), 
                             rownames(modS$summary.fixed), 
                             rownames(modTS$summary.fixed))
@@ -810,7 +976,7 @@ p
 ```
 
 
-```{r PosteriorRandomFields, echo = FALSE, warning = FALSE, cache = TRUE, fig.cap="Posterior mean spatial random fields"}
+```{r PosteriorRandomFields, echo = FALSE, warning = FALSE, cache = TRUE, fig.cap="Posterior mean spatial random fields", include = FALSE}
 #spatio-temporal random field
 pm <- modTS$summary.random$w$mean
 wproj <- inla.mesh.projector(mesh, 
@@ -833,7 +999,7 @@ do.call(function(...) grid.arrange(..., nrow=3),
         scale = list(draw = FALSE)))
 ```
 
-```{r PosteriorRandomFields2, echo = FALSE, warning = FALSE, cache = TRUE, fig.cap="Posterior mean spatial random fields"}
+```{r PosteriorRandomFields2, echo = FALSE, warning = FALSE, cache = TRUE, fig.cap="Posterior mean spatial random fields", include = FALSE}
 w <- modTS$summary.random$w$mean
 w.proj <- inla.mesh.projector(mesh,
                 xlim = range(st_coordinates(data)[,1]),

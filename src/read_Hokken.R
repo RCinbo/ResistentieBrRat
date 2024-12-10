@@ -201,8 +201,26 @@ NESF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
                               str_c(Hokken[a,'Bekken'][1],
                                     Hokken[a,'bekkennummer'], sep = "")))
 
+# a <- which(Hokken$Bekken == "BR")
+# BRSF <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+#                                      criterion =
+#                                        has_file("ResistentieBrRat.Rproj")),
+#                 layer = "Brussel_Fishnet_clip") %>%
+#   mutate(BekkenNaam = "Brussel",
+#          Bekkennummer = ifelse(is.na(Hokken[a,'bekkennummer']),
+#                                NA,
+#                                str_c(Hokken[a,'Bekken'][1],
+#                                      Hokken[a,'bekkennummer'], sep = "")),
+#          Bekkenkleur = ifelse(is.na(Hokken[a,'bekkennummer']),
+#                               str_c(Hokken[a,'Bekken'][1],
+#                                     Hokken[a,"closestneighbor"]),
+#                               str_c(Hokken[a,'Bekken'][1],
+#                                     Hokken[a,'bekkennummer'], sep = "")))
+
 Hokken <- rbind(BESF, BOSF, BPSF, DDSF, DLSF, DMSF, GKSF, IZSF, LESF, MASF,
-                MLSF, NESF) %>%
+                MLSF, NESF
+                #, BRSF
+                ) %>%
   mutate(BekkenNaam = as.factor(BekkenNaam),
          Bekkennummer = as.factor(Bekkennummer),
          Bekkenkleur = as.factor(Bekkenkleur))

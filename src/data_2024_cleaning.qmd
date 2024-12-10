@@ -41,10 +41,10 @@ library(WriteXLS)
 
 The objective of this report is to conduct an initial data analysis of the Data_Staalname_2024.xlsx dataset. During this analysis, several points of attention were identified for future review and clarification:
 
-- The dataset includes 13 river basins, whereas the previous dataset (2013-2019) contained 12 river basins. This discrepancy warrants further investigation.
-- Five locations in the dataset are associated with more than one rat. In the previous dataset (2013-2019), 16 such locations were recorded.
-- There are 40 cases where the location of a rat is recorded, but no mutation entry is provided.
-- Conversely, 17 cases were identified where mutation entries are present, but no location information is recorded.
+-   The dataset includes 13 river basins, whereas the previous dataset (2013-2019) contained 12 river basins. This discrepancy warrants further investigation.
+-   Five locations in the dataset are associated with more than one rat. In the previous dataset (2013-2019), 16 such locations were recorded.
+-   There are 40 cases where the location of a rat is recorded, but no mutation entry is provided.
+-   Conversely, 17 cases were identified where mutation entries are present, but no location information is recorded.
 
 \newpage
 
@@ -264,10 +264,9 @@ data_multi_loc %>% arrange(X_lambert) %>% select(!n) %>%
   kable_styling(latex_options = c("scale_down", "HOLD_position"))
 ```
 
-```{=tex}
 \elandscape
 \newpage
-```
+
 ```{r tbl_double_loc}
 #| label: tbl-double_loc_old
 #| tbl-cap: "Rats with identical locations in the 2013-2019 dataset."
@@ -320,10 +319,6 @@ ggplot(data_staalname_2024,
   coord_fixed(ratio = 1) + 
  facet_wrap(~mutatie)
 
-range(data_staalname_old$X_lambert,
-      na.rm = TRUE)
-range(data_staalname_2024$Y_lambert,
-      na.rm = TRUE)
 ```
 
 ```{r combining_datasets, eval = !file.exists(find_root_file("data", "data_2013_2024.xls", criterion = has_file("ResistentieBrRat.Rproj")))}
@@ -331,8 +326,16 @@ range(data_staalname_2024$Y_lambert,
 ## export combined dataset without observations with missing locations. 
 ## all data locations with multiple rats are still in the data 
 
-data_staalname_2024$RN <- (max(data_staalname_old$RN) + 1) :
-  (max(data_staalname_old$RN)+nrow(data_staalname_2024))
+data_staalname_2024$RN <- (max(data_staalname_old$RN) + 1):
+  (max(data_staalname_old$RN) + nrow(data_staalname_2024))
+
+data_staalname_2024$Bekken <- ifelse(is.na(data_staalname_2024$Bekken), 
+                                     NA, 
+                                     ifelse(data_staalname_2024$Bekken == "DE", 
+                                     "DM", 
+                                     data_staalname_2024$Bekken))
+
+# data_staalname_2024$Datum <- as.Date("2024-01-01")
 
 data_2013_2024 <- data_staalname_2024 %>% 
   select(!c(X_lambert_cent, Y_lambert_cent)) %>%  subset(!is.na(X_lambert) & 

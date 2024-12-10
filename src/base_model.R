@@ -16,7 +16,7 @@ base_model <- function(
 ) {
   assert_that(is.flag(first_order), noNA(first_order))
   read_excel(path = find_root_file("data",
-                                   "2013 - 2019 BMK.xlsx",
+                                   "data_2013_2024.xls",
                                    criterion =
                                      has_file("ResistentieBrRat.Rproj"))) ->
     base_data
@@ -36,7 +36,7 @@ base_model <- function(
       cyear = .data$year - center_year,
       X = .data$X / 1e3, Y = .data$Y / 1e3,
       secondary = NA_real_,
-      Resistent = 1*(!(mutatie =='WW')),
+      Resistent = 1*(!(mutatie == 'WW')),
       MutatieM1 = 1*(str_detect(mutatie,regex('M1'))),
       MutatieM2 = 1*(str_detect(mutatie,regex('M2'))),
       MutatieM3 = 1*(str_detect(mutatie,regex('M3')))
