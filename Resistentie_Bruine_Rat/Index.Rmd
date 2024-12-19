@@ -256,9 +256,34 @@ AantalSamples <- 10
 MeshMaxEdge <- 10e3
 ```
 
-Een overzicht van alle datapunten kan gevonden worden op [https://rattenbestrijding.inbo.be/](https://rattenbestrijding.inbo.be/). Figuur \@ref(fig:SamenvattingData) toont een samenvatting van de hoeveelheid data die we hebben over de verschillende bekkens en over alle jaren. Het doel was om ieder jaar in ieder van de bekkens 100 ratten te vangen en te testen op genetische mutaties. De bekken werden daarom in 100 hokken verdeeld zodat de steekproef geografisch gebalanceerd gespreid was. In 2017 en 2018 werden alleen de minder resistente hokken bemonsterd. In de periode van 2019 tem 2023 werd geen enkel hok bemonsterd. Pas in 2024 werden de verschillende hokken opnieuw bemonsterd. In totaal werden er zo ieder jaar minstens `r min(datajaar$N)` (in `r datajaar[datajaar$N==min(datajaar$N),'jaar']`) en maximum `r max(datajaar$N)` (in `r datajaar[datajaar$N==max(datajaar$N),'jaar']`) ratten gevangen en getest op resistentie. 
+Een overzicht van alle datapunten kan gevonden worden op [https://rattenbestrijding.inbo.be/](https://rattenbestrijding.inbo.be/). Figuur \@ref(fig:SamenvattingData) toont een samenvatting van de hoeveelheid data die we hebben over de verschillende bekkens en over alle jaren. Het doel was om ieder jaar in ieder van de bekkens 100 ratten te vangen en te testen op genetische mutaties. De bekken werden daarom in 100 hokken verdeeld zodat de steekproef geografisch gebalanceerd gespreid was. In 2017 en 2018 werden alleen de minder resistente hokken bemonsterd. In de periode van 2020 tem 2023 werd geen enkel hok bemonsterd. Pas in 2024 werden de verschillende hokken opnieuw bemonsterd. In totaal werden er zo ieder jaar minstens `r min(datajaar$N)` (in `r datajaar[datajaar$N==min(datajaar$N),'jaar']`) en maximum `r max(datajaar$N)` (in `r datajaar[datajaar$N==max(datajaar$N),'jaar']`) ratten gevangen en getest op resistentie. 
+
+
+```{r SamenvattingDatamean, eval = TRUE, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap = "Gemiddeld aantal gevangen ratten per jaar"}
+
+data %>% group_by(BekkenNaam, jaar, fact_jaar) %>% 
+  mutate(BekkenNaam = as.character(BekkenNaam)) %>% 
+  summarise(N = n()) %>%
+  ungroup() %>%
+   tidyr::complete(BekkenNaam, fact_jaar) %>% 
+    mutate(N = ifelse(is.na(N),0,N)) %>%
+  group_by(fact_jaar) %>% 
+  summarise(Mean = mean(N, na.rm = TRUE)) %>% 
+  ## Dit geeft de impressie dat als er geen observaties waren dat ze eigenlijk geen resistentie hebben gevonden 
+  ggplot(aes(x = as.numeric(fact_jaar), 
+                         y = Mean)) + 
+  geom_line(size = 1) +
+  geom_point() +
+  scale_x_continuous(breaks = seq(1, 12, 1), labels = as.character(c(2013:2024))) + 
+  scale_y_continuous(breaks = seq(0,120,20), limits = c(0,120)) + 
+  theme_bw() +
+  ylab('Aantal ratten') +
+  xlab("Jaar")
+```
+
 
 ```{r SamenvattingData, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap = "Aantal gevangen ratten per jaar, per bekken."}
+
 data %>% group_by(BekkenNaam, jaar, fact_jaar) %>% 
   mutate(BekkenNaam = as.character(BekkenNaam)) %>% 
   summarise(N = n()) %>%
@@ -268,10 +293,18 @@ data %>% group_by(BekkenNaam, jaar, fact_jaar) %>%
   ggplot + geom_line(aes(color = BekkenNaam, x = as.numeric(fact_jaar), y = N), size = 1) + 
   scale_x_continuous(breaks = seq(1, 12, 1), labels = as.character(c(2013:2024))) + 
   scale_y_continuous(breaks = seq(0,120,20), limits = c(0,120)) + 
-  theme_bw() + scale_color_brewer(name = "", palette = "Paired") +
+  theme_bw() + scale_color_brewer(name = "", 
+                                  palette = "Paired") +
   ylab('Aantal ratten') +
-  xlab("Jaar")
+  xlab("Jaar") + 
+  facet_wrap(vars(BekkenNaam), ncol = 3) + 
+  theme(legend.position = "none") + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
+
+
+
 ## Spreiding observaties in tijd
 
 Enkele ratten werden toegewezen aan een ander jaar dan het jaar waarin ze gevangen werden. Dit gebeurde vooral met ratten die op het einde van het voorgaande jaar werden gevangen (Figuur \@ref(fig:DatumvsJaar)). Figuur \@ref(fig:Vangstjaar) vergelijkt het jaar waarin de ratten gevangen werden ten opzichte van het jaar waaraan ze werden toegewezen. Figuur \@ref(fig:VangstjaarBekken) geeft hetzelfde overzicht per bekken. Op Figuur \@ref(fig:VangstjaarBekken) valt het op dat voor het bekken Maas Antwerpen er aanzienlijk minder ratten werden gevangen dan de voorgaande jaren. Er waren `r sum(is.na(data$datum))` ratten waar de datum van vangst niet gekend was ("Onbekend" in Figuur \@ref(fig:Vangstjaar)). Het hoge aantal ontbrekende datums is te wijten aan het jaar 2024. Gedurende dit jaar werden er  `r sum(!is.na(data %>% subset(jaar == 2024) %>% select(datum) %>% st_drop_geometry(data_all)))` datums opgegeven. Daarom kunnen ook de ratten die gevangen werden in 2023 ook niet geïdentificeerd worden  (Figuur \@ref(fig:Vangstjaar)). Alle ratten die gevangen werden in 2023 en 2024 werden toegewezen aan 2024. Voor verdere analyse werd de vangstdatum van de ratten voor het jaar 2024 arbitrair vastgelegd op 01/01/2024. 
@@ -399,7 +432,7 @@ B$color <- ifelse(is.na(B$Sampled) | !B$Sampled,
                                "Yes, overlap",
                                "Yes, no overlap")) 
 
-B %>% dplyr::filter(!is.na(year)) %>% mutate(color= as.factor(color)) %>%
+B %>% dplyr::filter(!is.na(year)) %>% mutate(color = as.factor(color)) %>%
   ggplot() + geom_sf(aes(fill = color, color = color)) + 
   facet_wrap(vars(year), ncol = 2) +
   scale_color_discrete(name = "Sampled?") +
@@ -479,7 +512,7 @@ ggplot() + geom_sf(data = Hokken, aes(fill = BekknNm), alpha = 0.2) +
 
 Figuur \@ref(fig:resistentieTijd) toont de trend in de proportie resistentie (over alle mutaties) en voor ieder van de mutaties apart. Figuur \@ref(fig:resistentieTijd2) toont dezelfde informatie per bekken. Deze grafieken zijn uiteraard vertekend in 2017 en 2018 wanneer er enkel in de gebieden met lage resistentie onderzoek werd gedaan. De trend in de periode 2019-2023 is een lineaire extrapolatie obv de beschikbare datapunten en niet de werkelijke trend. De werkelijke trend in deze periodekan verschillen ten opzichte van de trend weergegeven in Figuur \@ref(fig:resistentieTijd) en Figuur \@ref(fig:resistentieTijd2). Er kan wel opgemerkt worden dat de globale trend (Figuur \@ref(fig:resistentieTijd)) in de periode 2019-2023 een verderzetting is van de trend in de periode 2013-2019.
 
-```{r resistentieTijd, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap="Resistentie per bekken, per jaar."}
+```{r resistentieTijd, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap="Resistentie per jaar."}
 data %>% group_by(jaar) %>% st_drop_geometry() %>%
   summarize(Resistentie = mean(Resistent, na.rm = TRUE),
          M1 = mean(MutatieM1, na.rm = TRUE),
@@ -801,10 +834,14 @@ hyperpar %>%
 Hokken %>%
   right_join(predictions[predictions$dependent_var == "Resistent",],
              by = c('Bkknklr' = 'location')) %>%
-  ggplot() + geom_sf(aes(fill = mean, color = mean)) +
-  facet_wrap(vars(year), nrow = 3) +
+  ggplot() + 
+  geom_sf(data = Hokken, fill = NA, 
+          color = "gray", size = 0.2) +
+  geom_sf(aes(fill = mean, color = mean)) +
+  facet_wrap(vars(year), ncol = 2) +
   scale_fill_continuous(na.value = "grey")+
-  ggtitle('Resistentie')
+  ggtitle('Resistentie') + 
+  guides(fill = "none") 
 ```
 
 
@@ -812,8 +849,11 @@ Hokken %>%
 Hokken %>%
   right_join(predictions[predictions$dependent_var == "MutatieM1",],
              by = c('Bkknklr' = 'location')) %>%
-  ggplot() + geom_sf(aes(fill = mean, color= mean)) +
-  facet_wrap(vars(year), nrow = 3) +
+  ggplot() + 
+  geom_sf(data = Hokken, fill = NA, 
+          color = "gray", size = 0.2) +
+  geom_sf(aes(fill = mean, color = mean)) +
+  facet_wrap(vars(year), ncol = 2) +
   ggtitle('MutatieM1')
 ```
 
@@ -821,8 +861,11 @@ Hokken %>%
 Hokken %>%
   right_join(predictions[predictions$dependent_var == "MutatieM2",],
              by = c('Bkknklr' = 'location')) %>%
-  ggplot() + geom_sf(aes(fill = mean, color= mean)) +
-  facet_wrap(vars(year), nrow = 3) +
+  ggplot() + 
+  geom_sf(data = Hokken, fill = NA, 
+          color = "gray", size = 0.2) +
+  geom_sf(aes(fill = mean, color= mean)) +
+  facet_wrap(vars(year), ncol = 2) +
   ggtitle('MutatieM2')
 ```
 
@@ -830,8 +873,11 @@ Hokken %>%
 Hokken %>%
   right_join(predictions[predictions$dependent_var == "MutatieM3",],
              by = c('Bkknklr' = 'location')) %>%
-  ggplot() + geom_sf(aes(fill = mean, color = mean)) +
-  facet_wrap(vars(year), nrow = 3) +
+  ggplot() + 
+  geom_sf(data = Hokken, fill = NA, 
+          color = "gray", size = 0.2) +
+  geom_sf(aes(fill = mean, color = mean)) +
+  facet_wrap(vars(year), ncol = 2) +
   ggtitle('MutatieM3')
 ```
 
