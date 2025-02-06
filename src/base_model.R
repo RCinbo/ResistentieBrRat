@@ -18,8 +18,8 @@ base_model <- function(
   read_excel(path = find_root_file("data",
                                    "data_2013_2024.xls",
                                    criterion =
-                                     has_file("ResistentieBrRat.Rproj"))) ->
-    base_data
+                                     has_file("ResistentieBrRat.Rproj"))) %>% 
+    subset(!is.na(mutatie)) -> base_data
 
   base_data %>%
     rename(X = X_lambert,
@@ -62,9 +62,23 @@ base_model <- function(
       secondary = NA
     ) %>%
     arrange(.data$location, .data$year) -> base_prediction
+ unique_data <- base_data[!duplicated(base_data[c("X", "Y")]),] %>%  
+   select(-year)
+ years <- base_data %>% distinct(year) %>% pull(year)
+ base_data_expand <- unique_data %>% crossing(year = years)
+ # base_data_expand <- unique_data
+ base_data_expand %>% 
+    mutate(
+      iyear = .data$year - min(.data$year) + 1,
+      iyear2 = .data$iyear,
+      cyear = .data$year - center_year,
+      secondary = NA
+    ) %>%
+    arrange(.data$location, .data$year) -> all_prediction
   results <- fit_model(
     first_order = first_order, base_data = base_data,
-    trend_prediction = trend_prediction, base_prediction = base_prediction
+    trend_prediction = trend_prediction, base_prediction = base_prediction, 
+    all_prediction = all_prediction
   )
   return(
     c(

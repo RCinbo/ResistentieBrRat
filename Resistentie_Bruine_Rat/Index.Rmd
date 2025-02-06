@@ -73,6 +73,9 @@ library(assertthat)
 library(pROC)#for roc function in fit_model
 library(knitr)
 library(evaluate)
+library(gtsummary)
+library(gt)
+library(kableExtra)
 require(scales)
 opts_chunk$set(
   echo = FALSE,
@@ -138,6 +141,8 @@ library(tidyverse)
 library(readxl)
 library(ggplot2)
 library(dplyr)
+
+conflicted::conflicts_prefer(dplyr::filter)
 
 devtools::install_version("tidyr", version = "1.1.3")  ## need this version for the complete function to work
 library(tidyr)
@@ -215,7 +220,8 @@ data <- read_excel(path = find_root_file("data",
          Resistent = !(mutatie == 'WW'),
          MutatieM1 = str_detect(mutatie,regex('M1')),
          MutatieM2 = str_detect(mutatie,regex('M2')),
-         MutatieM3 = str_detect(mutatie,regex('M3')))
+         MutatieM3 = str_detect(mutatie,regex('M3'))) %>% 
+  subset(!is.na(mutatie))
 
 
 data <- data %>% filter(BekkenNaam != "Brussel")
@@ -259,7 +265,7 @@ MeshMaxEdge <- 10e3
 Een overzicht van alle datapunten kan gevonden worden op [https://rattenbestrijding.inbo.be/](https://rattenbestrijding.inbo.be/). Figuur \@ref(fig:SamenvattingData) toont een samenvatting van de hoeveelheid data die we hebben over de verschillende bekkens en over alle jaren. Het doel was om ieder jaar in ieder van de bekkens 100 ratten te vangen en te testen op genetische mutaties. De bekken werden daarom in 100 hokken verdeeld zodat de steekproef geografisch gebalanceerd gespreid was. In 2017 en 2018 werden alleen de minder resistente hokken bemonsterd. In de periode van 2020 tem 2023 werd geen enkel hok bemonsterd. Pas in 2024 werden de verschillende hokken opnieuw bemonsterd. In totaal werden er zo ieder jaar minstens `r min(datajaar$N)` (in `r datajaar[datajaar$N==min(datajaar$N),'jaar']`) en maximum `r max(datajaar$N)` (in `r datajaar[datajaar$N==max(datajaar$N),'jaar']`) ratten gevangen en getest op resistentie. 
 
 
-```{r SamenvattingDatamean, eval = TRUE, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap = "Gemiddeld aantal gevangen ratten per jaar"}
+```{r SamenvattingDatamean, eval = TRUE, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap = "Totaal aantal gevangen ratten per jaar"}
 
 data %>% group_by(BekkenNaam, jaar, fact_jaar) %>% 
   mutate(BekkenNaam = as.character(BekkenNaam)) %>% 
@@ -268,14 +274,14 @@ data %>% group_by(BekkenNaam, jaar, fact_jaar) %>%
    tidyr::complete(BekkenNaam, fact_jaar) %>% 
     mutate(N = ifelse(is.na(N),0,N)) %>%
   group_by(fact_jaar) %>% 
-  summarise(Mean = mean(N, na.rm = TRUE)) %>% 
+  summarise(Sum = sum(N, na.rm = TRUE)) %>% 
   ## Dit geeft de impressie dat als er geen observaties waren dat ze eigenlijk geen resistentie hebben gevonden 
   ggplot(aes(x = as.numeric(fact_jaar), 
-                         y = Mean)) + 
+                         y = Sum)) + 
   geom_line(size = 1) +
   geom_point() +
   scale_x_continuous(breaks = seq(1, 12, 1), labels = as.character(c(2013:2024))) + 
-  scale_y_continuous(breaks = seq(0,120,20), limits = c(0,120)) + 
+  scale_y_continuous(breaks = seq(0,1200,100), limits = c(0,1200)) + 
   theme_bw() +
   ylab('Aantal ratten') +
   xlab("Jaar")
@@ -461,6 +467,54 @@ ggplot() +
 
 Figuur \@ref(fig:Samenvattingresistentie) toont, voor ieder van de bekken en voor ieder jaar de proportie ratten die resistent waren door minstens één van de drie gekende genetische mutaties. Figuur \@ref(fig:Samenvattingresistentie2) toont, voor ieder van de bekken en voor ieder jaar de proportie ratten die resistent waren door ieder van de drie gekende genetische mutaties. Het is duidelijk dat mutatie 3 het minst voorkomt en mutatie 1 het meeste. In het Demerbekken en in mindere mate ook Dijle en Maas Limburg komt mutatie 2 vaker voor.
 
+\newpage
+
+```{r kruistabel_mutaties_data}
+
+table_01 <- as.data.frame(data) %>% select(mutatie, BekkenNaam ,fact_jaar) %>% 
+  tbl_strata(
+    strata = BekkenNaam, ~.x %>% 
+      tbl_summary(
+        by = fact_jaar,
+        statistic = list(
+          all_continuous() ~ "{mean} ({sd})",
+          all_categorical() ~ "{n}"
+          )
+   ))
+
+tbl_02 <- as.data.frame(data) %>% select(BekkenNaam, fact_jaar, mutatie) %>% 
+  group_nest(BekkenNaam) %>% 
+  mutate(tbl = map2(BekkenNaam, data, 
+                    ~tbl_summary(.y, by = fact_jaar, 
+                                 label = list(mutatie = paste("", .x)), 
+                                 statistic = list(
+                                   all_continuous() ~ "{mean} ({sd})",
+                                   all_categorical() ~ "{n} ({p}%)"
+                                   )) %>% 
+                      add_overall() %>% 
+                      add_n() %>% 
+                      modify_header(all_stat_cols() ~ "**{level}**") 
+                    )
+         ) %>% 
+  
+  pull(tbl) %>% 
+  tbl_stack()
+
+
+```
+
+\blandscape
+
+```{r crosstable, warning = FALSE, tab.cap = "Verdeling van het de verschillende mutaties."}
+tbl_02 %>%  as_kable_extra(booktabs = TRUE, longtable = TRUE)  %>% 
+  kable_styling(latex_options = c("scale_down", "HOLD_position", 
+                                  "repeat_header"), 
+                font_size = 9)
+```
+\elandscape
+
+
+
 ```{r Samenvattingresistentie, echo = FALSE, warning= FALSE, message = FALSE, fig.height = 6, fig.width=10, fig.cap="Resistentie per bekken, per jaar."}
 data %>% group_by(BekkenNaam, jaar) %>%  ## jaar is hier toegewezen jaar en niet gevangen jaar
   summarise(Resistent = mean(Resistent, na.rm = TRUE),
@@ -549,30 +603,34 @@ find_root_file("output",criterion =
     list.files(full.names = TRUE, recursive = TRUE) %>%
   map(readRDS) -> base_models
 
-dependent_var <- map_chr(base_models, "dependent")
+# dependent_var <- map_chr(base_models, "dependent", .default = "Unknown")
 
-waic <- map_dbl(base_models, "waic")
+valid_models <- purrr::keep(base_models, ~ "dependent" %in% names(.)&& !is.null("dependent"))[c(1:4)]
 
-map_lgl(base_models, "first_order") %>%
+dependent_var <- purrr::map_chr(valid_models, "dependent")
+
+waic <- map_dbl(valid_models, "waic", .default = "Unknown")
+
+map_lgl(valid_models, "first_order") %>%
   ifelse(1, 2) -> rw_order
 
-model_type <- map_chr(base_models, "type")
+model_type <- map_chr(valid_models, "type")
 
-map(base_models, "hyperpar") %>%
+map(valid_models, "hyperpar") %>%
   map(rownames_to_column, var = "parameter") %>%
   map2(dependent_var, ~mutate(.x, dependent_var = .y)) %>% ###not sure what's happenng here; replaced species with dependent_var
   map2(rw_order, ~mutate(.x, rw_order = .y)) %>%
   map2(model_type, ~mutate(.x, model = .y)) %>%
   bind_rows() -> hyperpar
 
-map(base_models, "fixed") %>%
+map(valid_models, "fixed") %>%
   map(rownames_to_column, var = "parameter") %>%
   map2(dependent_var, ~mutate(.x, dependent_var = .y)) %>%
   map2(rw_order, ~mutate(.x, rw_order = .y)) %>%
   map2(model_type, ~mutate(.x, model = .y)) %>%
   bind_rows() -> fixed
 
-map(base_models, "trend") %>%
+map(valid_models, "trend") %>%
   map2(dependent_var, ~mutate(.x, dependent_var = .y)) %>%
   map2(rw_order, ~mutate(.x, rw_order = .y)) %>%
   map2(model_type, ~mutate(.x, model = .y)) %>%
@@ -584,7 +642,7 @@ map(base_models, "trend") %>%
 #     prediction = interaction(model, type, sep = " ")
 #   ) -> trend
 
-map(base_models, "roc") %>%
+map(valid_models, "roc") %>%
   map("ci") %>%
   map(
     ~data.frame(parameter = c("lcl", "estimate", "ucl"), auc = as.vector(.x))
@@ -594,23 +652,33 @@ map(base_models, "roc") %>%
   map2(model_type, ~mutate(.x, model = .y)) %>%
   bind_rows() -> auc
 
-map(base_models, "predictions") %>%
+map(valid_models, "predictions") %>%
   map2(dependent_var, ~mutate(.x, dependent_var = .y)) %>%
   map2(rw_order, ~mutate(.x, rw_order = .y)) %>%
   map2(model_type, ~mutate(.x, model = .y)) %>%
   bind_rows() -> predictions
 
+map(valid_models, "all_prediction") %>%
+  map2(dependent_var, ~mutate(.x, dependent_var = .y)) %>%
+  map2(rw_order, ~mutate(.x, rw_order = .y)) %>%
+  map2(model_type, ~mutate(.x, model = .y)) %>%
+  bind_rows() -> all_predictions
+
 ```
 In dit hoofdstuk testen we een bayesiaans model met spatiale en temporale correlaties. De afhankelijke variabele, resistentie $Y_r$, is 1 indien er minstens één mutatie aanwezig is en anders 0. Voor de temporale component gebruiken we het feitelijke jaar waarin de rat werd gevangen en niet het jaar waaraan de rat werd toegewezen. Het jaar 2024 is het toegewezen jaar van de ratten die in 2023 en 2024 gevangen zijn.  Dit omdat voor deze gevangen ratten geen datum van vangst werd geregistreerd. Daarnaast gebruiken we ook de feitelijke x-y coördinaten in plaats van het hok waar de rat werd aan toegewezen. Deze x-y coordinaten kunnen afwijken van de echte vanglocatie; indien de echte vanglocatie niet gekend was, werd het centrum van het hok ingevuld.
 
-$$R_{st}=B(\pi_{st})$$
+$$Y_{st}=B(\pi_{st})$$
 
-$$E(R_{st})=\pi_{st}$$
+$$E(Y_{st})=\pi_{st}$$
 
 $$logit(\pi_{st}) = \beta_0+ \beta_t + \omega_{st}$$
 $$u_{st} \sim GMRF(0, \Omega)$$
 
 $Y_{st}$ is de afhankelijke variabele op locatie *s* op tijdstip *t*. We zullen vier verschillende modellen fitten:
+
+- $Y_{r}$: Resistentie op locatie *s* op tijdstip *t*
+  - $Y_{r}$ = 1: indien de rat op tijdstip *t*, op locatie *s* resistent is (d.w.z. dat ze minstens één van de mutaties heeft).
+  - $Y_{r}$ = 0: indien de rat op tijdstip *t*, op locatie *s* niet resistent is (d.w.z. dat ze geen van de drie mutaties heeft).
 
 - $Y_{1st}$: Aanwezigheid van mutatie 1 op locatie (s) op tijdstip *t*
   - $Y_{1st}$ = 1: indien de rat op tijdstip *t*, op locatie *s* mutatie 1 heeft.
@@ -624,9 +692,6 @@ $Y_{st}$ is de afhankelijke variabele op locatie *s* op tijdstip *t*. We zullen 
   - $Y_{3st}$ = 1: indien de rat op tijdstip *t*, op locatie *s* mutatie 3 heeft.
   - $Y_{3st}$ = 0: indien de rat op tijdstip *t*, op locatie *s* mutatie 3 niet heeft.
 
-- $Y_{1st}$: Resistentie op locatie *s* op tijdstip *t*
-  - $Y_{1st}$ = 1: indien de rat op tijdstip *t*, op locatie *s* resistent is (d.w.z. dat ze minstens één van de mutaties heeft).
-  - $Y_{1st}$ = 0: indien de rat op tijdstip *t*, op locatie *s* niet resistent is (d.w.z. dat ze geen van de drie mutaties heeft).
 
 $b_t$ is een random walk van de eerste orde in de tijd *t*. $\omega_{ts}$ is een GMRF (Gaussian Markov Random Field) met tijdscorrelatie.
 
@@ -750,7 +815,7 @@ plot_trend <- function(this_depvar) {
     ggplot(aes(x = year, y = mean, ymin = lcl, ymax = ucl)) +
     geom_ribbon(alpha = 0.3, linetype = 3) +
     geom_line() +
-    scale_y_continuous(labels = percent) +
+    scale_y_continuous(labels = percent, limits = c(0, 0.7)) +
     scale_x_continuous(year, breaks = c(2013:2024)) + 
     theme(axis.title = element_blank()) +
     ggtitle(this_depvar) 
@@ -831,52 +896,112 @@ hyperpar %>%
 ## Model predictions
 
 ```{r pred-Resistent, fig.height = 12, fig.width=10, warning=FALSE}
+`%ni%` <- Negate(`%in%`)
+
+all_predictions_avg <- all_predictions %>% 
+  filter(dependent_var == "Resistent") %>% 
+  group_by(year, location) %>% 
+  summarize(mean = mean(mean, na.rm = TRUE))
+
 Hokken %>%
-  right_join(predictions[predictions$dependent_var == "Resistent",],
-             by = c('Bkknklr' = 'location')) %>%
+  right_join(all_predictions_avg,
+             by = join_by(Bkknklr == location))  %>% 
   ggplot() + 
   geom_sf(data = Hokken, fill = NA, 
           color = "gray", size = 0.2) +
   geom_sf(aes(fill = mean, color = mean)) +
-  facet_wrap(vars(year), ncol = 2) +
-  scale_fill_continuous(na.value = "grey")+
-  ggtitle('Resistentie') + 
-  guides(fill = "none") 
+  scale_fill_gradient(low = "blue", high = "red", na.value = "grey") +
+  scale_color_gradient(low = "blue", high = "red") +
+  facet_wrap(vars(year), ncol = 2)  
+
+  
+```
+
+```{r eval = FALSE}
+
+pred_res <- Hokken %>%
+  right_join(predictions[predictions$dependent_var == "Resistent",],
+             by = c('Bkknklr' = 'location'))
+
+saveRDS(pred_res, "../output/predictions_resistentie.RDS")
+
+pred_M1 <- Hokken %>%
+  right_join(predictions[predictions$dependent_var == "MutatieM1",],
+             by = c('Bkknklr' = 'location'))
+
+saveRDS(pred_M1, "../output/predictions_M1.RDS")
+
+pred_M2 <- Hokken %>%
+  right_join(predictions[predictions$dependent_var == "MutatieM2",],
+             by = c('Bkknklr' = 'location'))
+
+saveRDS(pred_M2, "../output/predictions_M2.RDS")
+
+pred_M3 <- Hokken %>%
+  right_join(predictions[predictions$dependent_var == "MutatieM3",],
+             by = c('Bkknklr' = 'location'))
+
+saveRDS(pred_M3, "../output/predictions_M3.RDS")
+
+
 ```
 
 
 ```{r pred-M1, fig.height = 12, fig.width=10, warning=FALSE}
+
+all_predictions_avg <- all_predictions %>% 
+  filter(dependent_var == "MutatieM1") %>% 
+  group_by(year, location) %>% 
+  summarize(mean = mean(mean, na.rm = TRUE))
+
 Hokken %>%
-  right_join(predictions[predictions$dependent_var == "MutatieM1",],
+  right_join(all_predictions_avg,
              by = c('Bkknklr' = 'location')) %>%
   ggplot() + 
   geom_sf(data = Hokken, fill = NA, 
           color = "gray", size = 0.2) +
   geom_sf(aes(fill = mean, color = mean)) +
+  scale_fill_gradient(low = "blue", high = "red", na.value = "grey") +
+  scale_color_gradient(low = "blue", high = "red") +
   facet_wrap(vars(year), ncol = 2) +
   ggtitle('MutatieM1')
 ```
 
 ```{r pred-M2, fig.height = 12, fig.width=10, warning=FALSE}
+all_predictions_avg <- all_predictions %>% 
+  filter(dependent_var == "MutatieM2") %>% 
+  group_by(year, location) %>% 
+  summarize(mean = mean(mean, na.rm = TRUE))
+
 Hokken %>%
-  right_join(predictions[predictions$dependent_var == "MutatieM2",],
+  right_join(all_predictions_avg,
              by = c('Bkknklr' = 'location')) %>%
   ggplot() + 
   geom_sf(data = Hokken, fill = NA, 
           color = "gray", size = 0.2) +
   geom_sf(aes(fill = mean, color= mean)) +
+  scale_fill_gradient(low = "blue", high = "red", na.value = "grey") +  
+  scale_color_gradient(low = "blue", high = "red") +
   facet_wrap(vars(year), ncol = 2) +
   ggtitle('MutatieM2')
 ```
 
 ```{r pred-M3, fig.height = 12, fig.width=10, warning=FALSE}
+
+all_predictions_avg <- all_predictions %>% 
+  filter(dependent_var == "MutatieM3") %>% 
+  group_by(year, location) %>% 
+  summarize(mean = mean(mean, na.rm = TRUE))
+
 Hokken %>%
-  right_join(predictions[predictions$dependent_var == "MutatieM3",],
+  right_join(all_predictions_avg,
              by = c('Bkknklr' = 'location')) %>%
   ggplot() + 
   geom_sf(data = Hokken, fill = NA, 
           color = "gray", size = 0.2) +
   geom_sf(aes(fill = mean, color = mean)) +
+  scale_fill_gradient(low = "blue", high = "red", na.value = "grey") +  
+  scale_color_gradient(low = "blue", high = "red") +
   facet_wrap(vars(year), ncol = 2) +
   ggtitle('MutatieM3')
 ```
@@ -1079,6 +1204,7 @@ levelplot(z ~ x * y | fID ,
           ylab = list("Northing", cex = 1.5),
           main = list("Posterior mean spatial random fields", cex = 1.5))
 ```
+
 
 
 

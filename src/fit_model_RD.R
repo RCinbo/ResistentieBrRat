@@ -71,7 +71,7 @@ fit_model <- function(
     max.edge = 10
   ) -> mesh
   spde <- inla.spde2.pcmatern(
-    mesh = mesh, prior.range = c(50, 0.5), prior.sigma = c(0.1, 0.05)
+    mesh = mesh, prior.range = c(30, 0.5), prior.sigma = c(0.2, 0.05)
   )
   base_data %>%
     select(.data$X, .data$Y) %>%
@@ -149,7 +149,7 @@ fit_model <- function(
     ifelse(
       is_secondary,
       "f(
-        iyear, model = \"rw1\",
+        iyear, model = \"rw2\",
         hyper = list(theta = list(prior = \"pc.prec\", param = c(0.1, 0.05)))
       ) +
       f(
@@ -157,7 +157,7 @@ fit_model <- function(
       hyper = list(beta = list(fixed = FALSE))
       )",
       "f(
-        iyear, model = \"rw1\",
+        iyear, model = \"rw2\",
         hyper = list(theta = list(prior = \"pc.prec\", param = c(0.1, 0.05)))
       )"
     ),
@@ -181,7 +181,7 @@ fit_model <- function(
       site, model = spde, group = site.group,
       control.group = list(
         model = \"ar1\",
-        hyper = list(theta = list(prior = \"pc.cor1\", param = c(0.6, 0.7)))
+        hyper = list(theta = list(prior = \"pc.cor1\", param = c(0.3, 0.5)))
       )
     )"
   paste(fixed_formula, rw_formula, st_formula, sep = " +\n") %>%

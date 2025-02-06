@@ -335,6 +335,15 @@ data_staalname_2024$Bekken <- ifelse(is.na(data_staalname_2024$Bekken),
                                      "DM", 
                                      data_staalname_2024$Bekken))
 
+data_staalname_2024$Bekkennummer <- ifelse(is.na(
+  data_staalname_2024$Bekkennummer),
+  NA, 
+  str_replace(data_staalname_2024$Bekkennummer, 
+              pattern = "DE", 
+              replacement = "DM"))
+
+
+
 # data_staalname_2024$Datum <- as.Date("2024-01-01")
 
 data_2013_2024 <- data_staalname_2024 %>% 
