@@ -1,4 +1,6 @@
-dependents <- c("Resistent", "MutatieM1", "MutatieM2", "MutatieM3")
+dependents <- c("Resistent" 
+                , "MutatieM1", "MutatieM2", "MutatieM3"
+                )
 for (dependent in dependents) {
   output <- sprintf(
     "output/basemodel_%s.rds", dependent

@@ -62,10 +62,55 @@ base_model <- function(
       secondary = NA
     ) %>%
     arrange(.data$location, .data$year) -> base_prediction
- unique_data <- base_data[!duplicated(base_data[c("X", "Y")]),] %>%  
-   select(-year)
- years <- base_data %>% distinct(year) %>% pull(year)
- base_data_expand <- unique_data %>% crossing(year = years)
+  unique_data <- expand.grid(year = unique(base_data$year), 
+                             location = unique(base_data$location))
+  unique_data$Bekken <- str_sub(unique_data$location, 1 , 2)
+  Hokken <- read_sf(dsn = find_root_file("data", "Kaartjes", "Hokken",
+                                         criterion = 
+                                           has_file("ResistentieBrRat.Rproj"))
+                    ,layer = "Hokken"
+  ) %>%
+    st_transform("EPSG:31370")
+  Hokken <- Hokken %>% mutate(Bekken_klr = substr(Bkknklr, start = 1, 
+                                                  stop = 2),
+                              Bekken_nmm = substr(Bkknnmm, start = 1, 
+                                                  stop = 2),
+                              Number_klr = substr(Bkknklr, start = 3, 
+                                                  stop = 4), 
+                              Number_nmm = substr(Bkknnmm, start = 3, 
+                                                  stop = 4)) %>% 
+    rowwise() %>% 
+    mutate(Number_length_klr = nchar(Number_klr), 
+           Number_length_nmm = nchar(Number_nmm))
+  
+  Hokken <- Hokken %>% mutate(Bkknklr  = 
+                                ifelse(Number_length_klr == 2, 
+                                       Bkknklr, paste0(Bekken_klr, 
+                                                       paste0("0", Number_klr))), 
+                              Bkknnmm  = ifelse(Number_length_nmm == 2, 
+                                                Bkknnmm, paste0(Bekken_nmm, 
+                                                                paste0("0", Number_nmm)))
+  ) %>% 
+    select(c(1:6))
+  
+  Hokken <- cbind(st_coordinates(st_centroid(Hokken))/1e3, st_drop_geometry(Hokken))
+  Hokken <- Hokken %>% select(-c(Shap_Ar, Shp_Lng))
+  base_data_expand <- inner_join(unique_data, Hokken, join_by(location == Bkknnmm ))
+  # missing_hokken <- anti_join(base_data, base_data_expand, by = "location" ) %>% 
+  #   distinct(location, .keep_all = TRUE)
+  # missing_hokken_expnd <- expand.grid(year = unique(base_data$year), 
+  #                                     location = unique(missing_hokken$location)) %>% 
+  #                                       merge(missing_hokken %>% select(
+  #                                         location, mutatie, X, Y, Bekken))
+  # base_data_expand <- full_join(base_data_expand, missing_hokken_expnd)
+  # 1) expand.grid voor blok en jaar 
+ # 2) voor elke blok een coördinaten zijnde het midden van de blok
+ # 3) sf_centroid voor elke blok uit de polynoom (st_centroid)
+ # 4) die twee linken aan elkaar 
+ # 5) voor elk centrum voor elk blok de predicties gaan doen. 
+ # unique combinatie van jaar en data en dan complete of expand.grid van jaar en locatie 
+ # years <- base_data %>% distinct(year) %>% pull(year)
+ # base_data_expand <- unique_data %>% crossing(year = years)
  # base_data_expand <- unique_data
  base_data_expand %>% 
     mutate(

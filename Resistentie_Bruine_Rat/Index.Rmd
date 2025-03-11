@@ -898,13 +898,10 @@ hyperpar %>%
 ```{r pred-Resistent, fig.height = 12, fig.width=10, warning=FALSE}
 `%ni%` <- Negate(`%in%`)
 
-all_predictions_avg <- all_predictions %>% 
-  filter(dependent_var == "Resistent") %>% 
-  group_by(year, location) %>% 
-  summarize(mean = mean(mean, na.rm = TRUE))
 
 Hokken %>%
-  right_join(all_predictions_avg,
+  right_join(all_predictions %>%
+  filter(dependent_var == "Resistent"),
              by = join_by(Bkknklr == location))  %>% 
   ggplot() + 
   geom_sf(data = Hokken, fill = NA, 
@@ -949,13 +946,11 @@ saveRDS(pred_M3, "../output/predictions_M3.RDS")
 
 ```{r pred-M1, fig.height = 12, fig.width=10, warning=FALSE}
 
-all_predictions_avg <- all_predictions %>% 
-  filter(dependent_var == "MutatieM1") %>% 
-  group_by(year, location) %>% 
-  summarize(mean = mean(mean, na.rm = TRUE))
+
 
 Hokken %>%
-  right_join(all_predictions_avg,
+  right_join(all_predictions  %>%
+  filter(dependent_var == "MutatieM1"),
              by = c('Bkknklr' = 'location')) %>%
   ggplot() + 
   geom_sf(data = Hokken, fill = NA, 
@@ -968,13 +963,12 @@ Hokken %>%
 ```
 
 ```{r pred-M2, fig.height = 12, fig.width=10, warning=FALSE}
-all_predictions_avg <- all_predictions %>% 
-  filter(dependent_var == "MutatieM2") %>% 
-  group_by(year, location) %>% 
-  summarize(mean = mean(mean, na.rm = TRUE))
 
+
+  
 Hokken %>%
-  right_join(all_predictions_avg,
+  right_join(all_predictions %>%
+  filter(dependent_var == "MutatieM2"),
              by = c('Bkknklr' = 'location')) %>%
   ggplot() + 
   geom_sf(data = Hokken, fill = NA, 
@@ -988,13 +982,10 @@ Hokken %>%
 
 ```{r pred-M3, fig.height = 12, fig.width=10, warning=FALSE}
 
-all_predictions_avg <- all_predictions %>% 
-  filter(dependent_var == "MutatieM3") %>% 
-  group_by(year, location) %>% 
-  summarize(mean = mean(mean, na.rm = TRUE))
 
 Hokken %>%
-  right_join(all_predictions_avg,
+  right_join(all_predictions %>% 
+  filter(dependent_var == "MutatieM3") ,
              by = c('Bkknklr' = 'location')) %>%
   ggplot() + 
   geom_sf(data = Hokken, fill = NA, 
