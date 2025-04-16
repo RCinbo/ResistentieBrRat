@@ -95,6 +95,14 @@ base_model <- function(
   
   Hokken <- cbind(st_coordinates(st_centroid(Hokken))/1e3, st_drop_geometry(Hokken))
   Hokken <- Hokken %>% select(-c(Shap_Ar, Shp_Lng))
+  missing_hokken <- na.omit(setdiff(Hokken$Bkknnmm, unique_data$location))
+  missing_hokken <- data.frame(year = rep(unique(unique_data$year), 2), 
+                               location = rep(missing_hokken, 
+                                              each = length(unique(unique_data$year))), 
+                               Bekken = rep(str_sub(missing_hokken, 1, 2), 
+                                            each = length(unique(unique_data$year)))
+  )
+  unique_data <- rbind(unique_data, missing_hokken)
   base_data_expand <- inner_join(unique_data, Hokken, join_by(location == Bkknnmm ))
   # missing_hokken <- anti_join(base_data, base_data_expand, by = "location" ) %>% 
   #   distinct(location, .keep_all = TRUE)
