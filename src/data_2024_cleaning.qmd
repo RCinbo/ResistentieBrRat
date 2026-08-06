@@ -41,10 +41,10 @@ library(WriteXLS)
 
 The objective of this report is to conduct an initial data analysis of the Data_Staalname_2024.xlsx dataset. During this analysis, several points of attention were identified for future review and clarification:
 
--   The dataset includes 13 river basins, whereas the previous dataset (2013-2019) contained 12 river basins. This discrepancy warrants further investigation.
--   Five locations in the dataset are associated with more than one rat. In the previous dataset (2013-2019), 16 such locations were recorded.
--   There are 40 cases where the location of a rat is recorded, but no mutation entry is provided.
--   Conversely, 17 cases were identified where mutation entries are present, but no location information is recorded.
+- The dataset includes 13 river basins, whereas the previous dataset (2013-2019) contained 12 river basins. This discrepancy warrants further investigation.
+- Five locations in the dataset are associated with more than one rat. In the previous dataset (2013-2019), 16 such locations were recorded.
+- There are 40 cases where the location of a rat is recorded, but no mutation entry is provided.
+- Conversely, 17 cases were identified where mutation entries are present, but no location information is recorded.
 
 \newpage
 
@@ -280,8 +280,8 @@ data_multi_loc_old %>% arrange(X_lambert) %>% select(!n) %>%
 
 @fig-missingness shows the location of the missing data in the dataset. We notice that no entries were given for de variable "Datum". The variables `X_lambert`, `Y_lambert`, and `mutatie` show a similar degree of missingness. Several observations have missingness for multiple variables (@fig-missingnesspattern) On average 31.4% of the dataset is missing. There are several data points that should be double checked:
 
--   There are 40 rats where the location is present but there is no entry for mutation
--   There are 17 rats who have a no location but have an entry for mutation.
+- There are 40 rats where the location is present but there is no entry for mutation
+- There are 17 rats who have a no location but have an entry for mutation.
 
 It has to be checked if the data of these observations could be added to the dataset. Based on @fig-location_missingness we can see that the missingness in mutation is associated with a specific location.
 
