@@ -54,6 +54,7 @@ base_model <- function(
       intercept = 1,
       secondary = NA_real_
     ) -> trend_prediction
+  
   base_data %>%
     mutate(
       iyear = .data$year - min(.data$year) + 1,
@@ -62,6 +63,18 @@ base_model <- function(
       secondary = NA
     ) %>%
     arrange(.data$location, .data$year) -> base_prediction
+  
+  base_data |> 
+    distinct(.data$Bekken, .data$year) |> 
+    arrange(.data$Bekken) |> 
+    mutate(
+      iyear = .data$year - min(.data$year) + 1,
+      iyear2 = .data$iyear,
+      cyear = .data$year - center_year,
+      intercept = 1,
+      secondary = NA_real_
+    ) -> bekken_trend_prediction
+  
   unique_data <- expand.grid(year = unique(base_data$year), 
                              location = unique(base_data$location))
   unique_data$Bekken <- str_sub(unique_data$location, 1 , 2)
@@ -130,8 +143,10 @@ base_model <- function(
     arrange(.data$location, .data$year) -> all_prediction
   results <- fit_model(
     first_order = first_order, base_data = base_data,
-    trend_prediction = trend_prediction, base_prediction = base_prediction, 
-    all_prediction = all_prediction
+    trend_prediction = trend_prediction, 
+    base_prediction = base_prediction, 
+    all_prediction = all_prediction, 
+    bekken_trend_prediction = bekken_trend_prediction
   )
   return(
     c(
