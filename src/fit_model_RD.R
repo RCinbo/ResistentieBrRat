@@ -2,6 +2,8 @@
 #The original function also took into account the result for other species,
 #that is not needed here. Small changes had been made.
 
+conflicted::conflicts_prefer(assertthat::has_name)
+
 #' Fit a model to a species using the predictions for a secondary species
 #' @inheritParams base_model
 #' @param base_data A dataframe with the base data.
@@ -18,14 +20,18 @@
 #' @importFrom rlang .data
 #' @importFrom stats as.formula
 fit_model <- function(
-  first_order = TRUE, base_data, trend_prediction, base_prediction, 
-  all_prediction
+  first_order = TRUE, 
+  base_data, trend_prediction, base_prediction, 
+  all_prediction, bekken_trend_prediction
 ) {
   assert_that(is.flag(first_order), noNA(first_order))
+  
   assert_that(inherits(base_data, "data.frame"))
   assert_that(inherits(trend_prediction, "data.frame"))
   assert_that(inherits(base_prediction, "data.frame"))
   assert_that(inherits(all_prediction, "data.frame"))
+  assert_that(inherits(bekken_trend_prediction, "data.frame"))
+  
   assert_that(
     has_name(base_data, "iyear"), has_name(base_data, "iyear2"),
     has_name(base_data, "X"), has_name(base_data, "Y"),
@@ -33,6 +39,11 @@ fit_model <- function(
   )
   assert_that(
     has_name(trend_prediction, "iyear"), has_name(trend_prediction, "iyear2"),
+    has_name(base_prediction, "secondary"), 
+    has_name(all_prediction, "secondary")
+  )
+    assert_that(
+    has_name(bekken_trend_prediction, "iyear"), has_name(bekken_trend_prediction, "iyear2"),
     has_name(base_prediction, "secondary"), 
     has_name(all_prediction, "secondary")
   )
@@ -46,12 +57,15 @@ fit_model <- function(
     has_name(all_prediction, "X"), has_name(all_prediction, "Y"),
     has_name(all_prediction, "secondary")
   )
+  
   is_secondary <- any(!is.na(base_data$secondary))
+  
   if (is_secondary) {
     time_vars <- c("before", "after")
     assert_that(
       has_name(base_data, "before"), has_name(base_data, "after"),
       has_name(trend_prediction, "before"), has_name(trend_prediction, "after"),
+      has_name(bekken_trend_prediction, "before"), has_name(bekken_trend_prediction, "after"),
       has_name(base_prediction, "before"), has_name(base_prediction, "after"), 
       has_name(all_prediction, "before"), has_name(all_prediction, "after")
     )
@@ -65,8 +79,8 @@ fit_model <- function(
   n_year <- max(base_data$iyear)
   year_interval <- 1
   seq(year_interval / 2, n_year, by = year_interval) %>%
-    inla.mesh.1d() -> time_mesh
-  inla.mesh.2d(
+    fmesher::fm_mesh_1d() -> time_mesh
+  fmesher::fm_mesh_2d_inla(
     loc.domain = distinct(base_data, .data$X, .data$Y),
     max.edge = 10
   ) -> mesh
@@ -82,6 +96,8 @@ fit_model <- function(
   site_index <- inla.spde.make.index(
     name = "site", n.spde = mesh$n, n.group = time_mesh$n
   )
+  # creating the stacks
+  
   inla.stack(
     data = select(base_data, .data$Resistent),
     A = list(a_estimate, 1),
@@ -94,24 +110,48 @@ fit_model <- function(
     ),
     tag = "estimate"
   ) -> stack_estimate
+  
+  inla.stack(
+    data = select(base_data, .data$Resistent),
+    A = list(a_estimate, 1),
+    effects = list(
+      c(site_index, list(intercept = 1)),
+      list(
+        base_data %>%
+          select(Bekken, !!time_vars, .data$iyear, .data$iyear2, .data$secondary)
+      )
+    ),
+    tag = "estimate"
+  ) -> stack_estimate_bekken
+  
   inla.stack(
     data = data.frame(Resistent = NA),
     A = list(1),
     effects = list(list(trend_prediction)),
     tag = "trend"
   ) -> stack_trend
+  
+  inla.stack(
+    data = data.frame(Resistent = NA),
+    A = list(1),
+    effects = list(list(bekken_trend_prediction)),
+    tag = "trend"
+  ) -> stack_bekken_trend
+  
   base_prediction %>%
     select(.data$X, .data$Y) %>%
     as.matrix() %>%
     inla.spde.make.A(
       mesh = mesh, group = base_prediction$iyear, mesh.group = time_mesh
     ) -> a_prediction
+  
   all_prediction %>%
     select(.data$X, .data$Y) %>%
     as.matrix() %>%
     inla.spde.make.A(
       mesh = mesh, group = all_prediction$iyear, mesh.group = time_mesh
     ) -> a_all_prediction
+  
   inla.stack(
     data = data.frame(Resistent = NA),
     A = list(a_prediction, 1),
@@ -124,6 +164,7 @@ fit_model <- function(
     ),
     tag = "prediction"
   ) -> stack_prediction
+  
   inla.stack(
     data = data.frame(Resistent = NA),
     A = list(a_all_prediction, 1),
@@ -136,13 +177,22 @@ fit_model <- function(
     ),
     tag = "all_prediction"
   ) -> stack_all_prediction
+  
   inla.stack(stack_estimate, stack_trend) -> stack
   inla.stack(stack_estimate, stack_prediction) -> stack2
   inla.stack(stack_estimate, stack_all_prediction) -> stack3
+  inla.stack(stack_estimate, stack_bekken_trend) -> stack4
+  inla.stack(stack_estimate_bekken, stack_bekken_trend) -> stack5
+  
   fixed_formula <- ifelse(
     is_secondary,
     "Resistent ~ 0 + intercept + before + after",
     "Resistent ~ 0 + intercept + cyear"
+  )
+  fixed_formula_bekken <- ifelse(
+    is_secondary,
+    "Resistent ~ 0 + intercept + before + after + Bekken",
+    "Resistent ~ 0 + intercept + cyear + Bekken"
   )
   rw_formula <- ifelse(
     first_order,
@@ -181,11 +231,15 @@ fit_model <- function(
       site, model = spde, group = site.group,
       control.group = list(
         model = \"ar1\",
-        hyper = list(theta = list(prior = \"pc.cor1\", param = c(0.3, 0.5)))
+        hyper = list(theta = list(prior = \"pc.cor1\", param = c(0.5, 0.8)))
       )
     )"
-  paste(fixed_formula, rw_formula, st_formula, sep = " +\n") %>%
+  
+  paste(fixed_formula, rw_formula, st_formula,  sep = " +\n") %>%
     as.formula() -> model_formula
+  paste(fixed_formula_bekken, rw_formula, st_formula, sep = " +\n") %>%
+    as.formula() -> model_formula_bekken
+  
   m0 <- inla(
     model_formula, family = "binomial", data = inla.stack.data(stack_estimate),
     control.predictor = list(A = inla.stack.A(stack_estimate), compute = FALSE)
@@ -206,11 +260,25 @@ fit_model <- function(
   index_auc <- inla.stack.index(stack2, "estimate")$data
   m3 <- inla(
     model_formula, family = "binomial", data = inla.stack.data(stack3),
-    control.predictor = list(
-      A = inla.stack.A(stack3), compute = TRUE, link = 1
+    control.predictor = list(A = inla.stack.A(stack3), compute = TRUE, link = 1
     ),
     control.mode = list(theta = m0$mode$theta, restart = FALSE, fixed = TRUE)
   )
+  m4 <- inla(
+    model_formula, family = "binomial", data = inla.stack.data(stack4),
+    control.compute = list(waic = TRUE, config = TRUE),
+    control.predictor = list(A = inla.stack.A(stack4), compute = TRUE, link = 1),
+    control.mode = list(theta = m0$mode$theta, restart = FALSE, fixed = TRUE)
+  )
+
+  m4_bekken <- inla(
+    model_formula_bekken, family = "binomial", data = inla.stack.data(stack5),
+    control.compute = list(waic = TRUE, config = TRUE),
+    control.predictor = list(A = inla.stack.A(stack5), compute = TRUE, link = 1),
+    control.mode = list(theta = m0$mode$theta, restart = FALSE, fixed = TRUE)
+  )
+  
+      
   # index_auc <- inla.stack.index(stack3, "estimate")$data
   roc_curve <- roc(
     predictor = m2$summary.fitted.values[index_auc, "mean"],
@@ -237,17 +305,56 @@ fit_model <- function(
       all_prediction %>%
         select(.data$year, .data$location)
     ) -> predictions_all
+  
   index_trend <- inla.stack.index(stack, "trend")$data
   m1$summary.fitted.values[index_trend, ] %>%
     select(.data$mean, median = 4, lcl = 3, ucl = 5) %>%
     as_tibble() %>%
     bind_cols(trend_prediction) -> trend
+  
+  index_trend <- inla.stack.index(stack4, "trend")$data
+  
+  m4$summary.fitted.values[index_trend, ] %>%
+    select(.data$mean, median = 4, lcl = 3, ucl = 5) %>%
+    as_tibble() %>%
+    bind_cols(bekken_trend_prediction) -> bekken_trend
+  
+  index_trend <- inla.stack.index(stack5, "trend")$data
+  
+  m4_bekken$summary.fitted.values[index_trend, ] %>%
+    select(.data$mean, median = 4, lcl = 3, ucl = 5) %>%
+    as_tibble() %>%
+    bind_cols(bekken_trend_prediction) -> bekken_trend_est
+  
+  # p2013 <- bekken_trend |> 
+  #   filter(Bekken == "BE" & year == "2013") |> 
+  #   select(mean)
+  # p2024 <- bekken_trend |> 
+  #   filter(Bekken == "BE" & year == "2024") |> 
+  #   select(mean)
+  # 
+  # diff <- p2024 - p2013
+  
+  samp <- inla.posterior.sample(10000, m4_bekken)
+  calc_diff <- function(x) {
+    data.frame(prediction = (x$latent[index_trend, ])) |> 
+    cbind(bekken_trend_est |> 
+            select(Bekken, year, iyear, iyear2, cyear, intercept)) |> 
+    complete(Bekken, year) |> 
+    group_by(Bekken) |>  
+    summarise(difference = plogis(prediction[year == "2024"]) - 
+                plogis(prediction[year == "2013"]))
+  }
+  
+  output <- map(samp, calc_diff)
+  
   return(
     list(
       fixed = m0$summary.fixed, trend = trend,
       hyperpar = m0$summary.hyperpar, predictions = predictions,
       waic = m1$waic$waic, first_order = first_order, roc = roc_curve, 
-      all_prediction = predictions_all
+      all_prediction = predictions_all, 
+      samples = output
     )
   )
 }
