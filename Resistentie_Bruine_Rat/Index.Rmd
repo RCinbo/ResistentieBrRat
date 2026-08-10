@@ -809,7 +809,7 @@ fixed %>%
 
 ```{r trends-Resistent}
 
-plot_trend <- function(this_depvar) {
+plot_trend <- function(this_depvar, title) {
   trend %>%
     subset(dependent_var  == this_depvar) %>%
     ggplot(aes(x = year, y = mean, ymin = lcl, ymax = ucl)) +
@@ -817,20 +817,21 @@ plot_trend <- function(this_depvar) {
     geom_line() +
     scale_y_continuous(labels = percent, limits = c(0, 0.7)) +
     scale_x_continuous(year, breaks = c(2013:2024)) + 
-    theme(axis.title = element_blank()) +
-    ggtitle(this_depvar) 
+    theme(axis.title.y = element_blank()) +
+    xlab("Year") + 
+    ggtitle(title) 
 }
-plot_trend("Resistent")
+plot_trend(this_depvar = "Resistent", title = "Resistance")
 ```
 
 ```{r trends-MutatieM1}
-plot_trend("MutatieM1")
+plot_trend(this_depvar = "MutatieM1", title = "Resistance M1")
 ```
 ```{r trends-MutatieM2}
-plot_trend("MutatieM2")
+plot_trend(this_depvar = "MutatieM2", title = "Resistance M2")
 ```
 ```{r trends-MutatieM3}
-plot_trend("MutatieM3")
+plot_trend(this_depvar = "MutatieM3", title = "Resistance M3")
 ```
 
 
